@@ -89,7 +89,7 @@ class ForwardRun:
         An array of shape *(nrow, ncol, n)* representing simulated discharges on the domain for each
         **time_step**.
 
-    internal_fluxes: `dict[str, numpy.ndarray]`
+    internal_fluxes : `dict[str, numpy.ndarray]`
         A dictionary where keys are the names of the internal fluxes and the values are array of
         shape *(nrow, ncol, n)* representing an internal flux on the domain for each **time_step**.
 
@@ -134,7 +134,7 @@ def forward_run(
     cost_options: dict[str, Any] | None = None,
     common_options: dict[str, Any] | None = None,
     return_options: dict[str, Any] | None = None,
-) -> Model | (Model, ForwardRun):
+) -> Model | tuple[Model, ForwardRun]:
     wmodel = model.copy()
 
     ret_forward_run = wmodel.forward_run(cost_options, common_options, return_options)
@@ -142,7 +142,7 @@ def forward_run(
     if ret_forward_run is None:
         return wmodel
     else:
-        return wmodel, ret_forward_run
+        return (wmodel, ret_forward_run)
 
 
 def _forward_run(
@@ -217,7 +217,7 @@ def _forward_run(
 @_multiple_forward_run_doc_appender
 def multiple_forward_run(
     model: Model,
-    samples: Samples,
+    samples: Samples | dict[str, Any],
     cost_options: dict[str, Any] | None = None,
     common_options: dict[str, Any] | None = None,
 ) -> MultipleForwardRun:
@@ -232,7 +232,8 @@ def multiple_forward_run(
 
 def _multiple_forward_run(
     model: Model,
-    samples: Samples,
+    samples: Samples | None,
+    spatialized_samples: dict[str, np.ndarray],
     cost_options: dict,
     common_options: dict,
 ) -> dict:
@@ -253,11 +254,11 @@ def _multiple_forward_run(
     _map_dict_to_fortran_derived_type(common_options, wrap_options.comm)
 
     # % Generate samples info
-    nv = samples._problem["num_vars"]
+    nv = len(spatialized_samples)
     samples_kind = np.zeros(shape=nv, dtype=np.int32, order="F")
     samples_ind = np.zeros(shape=nv, dtype=np.int32, order="F")
 
-    for i, name in enumerate(samples._problem["names"]):
+    for i, name in enumerate(spatialized_samples.keys()):
         if name in model._parameters.rr_parameters.keys:
             samples_kind[i] = 0
             # % Adding 1 because Fortran uses one based indexing
@@ -271,9 +272,10 @@ def _multiple_forward_run(
             pass
 
     # % Initialise results
-    cost = np.zeros(shape=samples.n_sample, dtype=np.float32, order="F")
+    n_sample = next(iter(spatialized_samples.values())).shape[-1]
+    cost = np.zeros(shape=n_sample, dtype=np.float32, order="F")
     q = np.zeros(
-        shape=(*model.response_data.q.shape, samples.n_sample),
+        shape=(*model.response_data.q.shape, n_sample),
         dtype=np.float32,
         order="F",
     )
@@ -285,11 +287,17 @@ def _multiple_forward_run(
         model._parameters,
         model._output,
         wrap_options,
-        samples.to_numpy(),
+        np.transpose(list(spatialized_samples.values()), (1, 2, 0, 3)),
         samples_kind,
         samples_ind,
         cost,
         q,
     )
 
-    return {"cost": cost, "q": q, "_samples": samples, "_cost_options": cost_options}
+    return {
+        "cost": cost,
+        "q": q,
+        "_samples": samples,
+        "_spatialized_samples": spatialized_samples,
+        "_cost_options": cost_options,
+    }

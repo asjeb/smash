@@ -12,17 +12,20 @@ from smash.core.simulation.control import (
 from smash.core.simulation.estimate.estimate import MultisetEstimate, multiset_estimate
 from smash.core.simulation.optimize.optimize import (
     BayesianOptimize,
-    MultipleOptimize,
     Optimize,
     bayesian_optimize,
-    multiple_optimize,
     optimize,
 )
 from smash.core.simulation.options import (
     default_bayesian_optimize_options,
     default_optimize_options,
 )
-from smash.core.simulation.run.run import ForwardRun, MultipleForwardRun, forward_run, multiple_forward_run
+from smash.core.simulation.run.run import (
+    ForwardRun,
+    MultipleForwardRun,
+    forward_run,
+    multiple_forward_run,
+)
 from smash.factory.samples.samples import Samples
 
 
@@ -39,7 +42,6 @@ __all__ = [
     "forward_run",
     "multiple_forward_run",
     "optimize",
-    "multiple_optimize",
     "bayesian_optimize",
     "default_optimize_options",
     "default_bayesian_optimize_options",
@@ -51,7 +53,6 @@ __all__ = [
     "ForwardRun",
     "MultipleForwardRun",
     "Optimize",
-    "MultipleOptimize",
     "BayesianOptimize",
     "MultisetEstimate",
     "Signatures",

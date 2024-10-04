@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy.stats import gaussian_kde
+from scipy.stats import gaussian_kde as scipy_gaussian_kde
 from tqdm import tqdm
 
 from smash.core.simulation.run.run import _forward_run
@@ -16,19 +16,21 @@ if TYPE_CHECKING:
 
 
 def _compute_density(
-    samples: Samples,
-    optimized_parameters: dict,
+    samples: Samples | None,
+    spatialized_samples: dict[np.ndarray],
     active_cell: np.ndarray,
 ) -> dict:
     density = {}
 
-    for p, optim_param in optimized_parameters.items():
-        dst = getattr(samples, "_dst_" + p)
-        density[p] = np.tile(
-            dst, (*active_cell.shape, 1)
-        )  # spatialized density (*active_cell.shape, n_sample)
+    for p, spl_sample in spatialized_samples.items():
+        if samples is not None:
+            dst = getattr(samples, "_dst_" + p)
+            density[p] = np.tile(
+                dst, (*active_cell.shape, 1)
+            )  # convert to spatialized density (*active_cell.shape, n_sample)
 
-        if isinstance(optim_param, np.ndarray):
+        else:
+            density[p] = np.zeros((*active_cell.shape, spl_sample.shape[-1]))
             estimated_cell = np.zeros(active_cell.shape)
 
             for ac in [0, 1]:  # Iterate on two blocs active/inactive cell
@@ -37,33 +39,29 @@ def _compute_density(
                 if np.all(
                     [
                         np.allclose(
-                            optim_param[..., i][mask],
-                            optim_param[..., i][mask][0],
+                            spl_sample[..., i][mask],
+                            spl_sample[..., i][mask][0],
                         )
-                        for i in range(optim_param.shape[-1])
+                        for i in range(spl_sample.shape[-1])
                     ]
-                ):  # if optim_param[mask] contain only uniform values
-                    unf_optim_param = optim_param[mask][0, :]
+                ):  # if spl_sample[mask] contain only uniform values
+                    unif_sample = spl_sample[mask][0, :]
 
-                    if np.allclose(unf_optim_param, unf_optim_param[0]):
-                        estimted_density = np.ones(unf_optim_param.shape)
+                    if np.allclose(unif_sample, unif_sample[0]):
+                        density[p][mask] = np.ones(unif_sample.shape)
                     else:
-                        estimted_density = gaussian_kde(unf_optim_param)(unf_optim_param)
-
-                    density[p][mask] *= estimted_density  # compute joint-probability
+                        density[p][mask] = scipy_gaussian_kde(unif_sample)(unif_sample)
 
                     estimated_cell[mask] = True
 
             for i, j in np.ndindex(active_cell.shape):  # Iterate on all grid cells
                 if not estimated_cell[i, j]:
-                    unf_optim_param_ij = optim_param[i, j, :]
+                    unif_sample_ij = spl_sample[i, j, :]
 
-                    if np.allclose(unf_optim_param_ij, unf_optim_param_ij[0]):
-                        estimted_density = np.ones(unf_optim_param_ij.shape)
+                    if np.allclose(unif_sample_ij, unif_sample_ij[0]):
+                        density[p][i, j] = np.ones(unif_sample_ij.shape)
                     else:
-                        estimted_density = gaussian_kde(unf_optim_param_ij)(unf_optim_param_ij)
-
-                    density[p][i, j] *= estimted_density  # compute joint-probability
+                        density[p][i, j] = scipy_gaussian_kde(unif_sample_ij)(unif_sample_ij)
 
     return density
 
@@ -107,10 +105,10 @@ def _forward_run_with_estimated_parameters(
     cost_options: dict,
     common_options: dict,
     return_options: dict,
-) -> (ForwardRun | None, dict):
+) -> tuple[ForwardRun | None, dict]:
     mahal_distance = 0
 
-    for p in prior_data.keys():
+    for p in prior_data:
         param_p, distance_p = _estimate_parameter(prior_data[p], cost, density[p], alpha)
 
         if p in model.rr_parameters.keys:
@@ -146,7 +144,7 @@ def _forward_run_with_estimated_parameters(
 def _lcurve_forward_run_with_estimated_parameters(
     alpha: np.ndarray,
     *args_forward_run_with_estimated_parameters: AnyTuple,
-) -> (ForwardRun | None, dict):
+) -> tuple[ForwardRun | None, dict]:
     l_cost = np.zeros(alpha.size)
     l_mahal_distance = np.zeros(alpha.size)
 

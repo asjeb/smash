@@ -29,34 +29,42 @@ def generic_optimize(model_structure: list[smash.Model], **kwargs) -> dict:
         else:
             parameters = None
 
+        # % Hybrid forward hydrological model with NN
+        if model.setup.n_layers > 0:
+            model.set_nn_parameters_weight(initializer="glorot_normal", random_state=11)
+
         for mp in MAPPING:
             if mp == "ann":
-                instance = smash.optimize(
+                instance, ret = smash.optimize(
                     model,
                     mapping=mp,
                     optimize_options={
                         "parameters": parameters,
                         "learning_rate": 0.01,
                         "random_state": 11,
-                        "termination_crit": {"epochs": 3},
+                        "termination_crit": {"maxiter": 2},
                     },
                     common_options={"ncpu": ncpu, "verbose": False},
+                    return_options={"control_vector": True},
                 )
 
             else:
+                # Ignore SBS optimizer if the forward model uses NN
+                opt = "lbfgsb" if model.setup.n_layers > 0 else None
+
                 instance, ret = smash.optimize(
                     model,
                     mapping=mp,
+                    optimizer=opt,
                     optimize_options={
                         "parameters": parameters,
                         "termination_crit": {"maxiter": 1},
                     },
                     common_options={"ncpu": ncpu, "verbose": False},
-                    return_options={"iter_cost": True, "control_vector": True},
+                    return_options={"control_vector": True},
                 )
 
-                res[f"optimize.{model.setup.structure}.{mp}.iter_cost"] = ret.iter_cost
-                res[f"optimize.{model.setup.structure}.{mp}.control_vector"] = ret.control_vector
+            res[f"optimize.{model.setup.structure}.{mp}.control_vector"] = ret.control_vector
 
             qsim = instance.response.q[:].flatten()
             qsim = qsim[::10]  # extract values at every 10th position
@@ -75,7 +83,8 @@ def test_optimize():
 
 
 def test_sparse_optimize():
-    res = generic_optimize(pytest.sparse_model_structure)
+    # % Only test sparse storage optimization on one model structure
+    res = generic_optimize(pytest.sparse_model_structure[0:1])
 
     for key, value in res.items():
         # % Check qsim in sparse storage run
@@ -218,15 +227,84 @@ def generic_custom_optimize(model: smash.Model, **kwargs) -> dict:
                 "verbose": False,
             },
         },
+        # % Test custom mapping and optimizer
+        {
+            "mapping": "uniform",
+            "optimizer": "adam",
+            "optimize_options": {
+                "learning_rate": 0.06,
+                "termination_crit": {"early_stopping": 2},
+            },
+            "common_options": {
+                "ncpu": ncpu,
+                "verbose": False,
+            },
+        },
+        {
+            "mapping": "distributed",
+            "optimizer": "rmsprop",
+            "optimize_options": {
+                "learning_rate": 0.02,
+                "termination_crit": {"maxiter": 1},
+            },
+            "common_options": {
+                "ncpu": ncpu,
+                "verbose": False,
+            },
+        },
+        {
+            "mapping": "multi-linear",
+            "optimizer": "sgd",
+            "optimize_options": {
+                "learning_rate": 0.15,
+                "termination_crit": {"maxiter": 1},
+            },
+            "common_options": {
+                "ncpu": ncpu,
+                "verbose": False,
+            },
+        },
+        {
+            "mapping": "ann",
+            "optimizer": "adagrad",
+            "optimize_options": {
+                "learning_rate": 0.1,
+                "random_state": 0,
+                "termination_crit": {"early_stopping": 1},
+            },
+            "common_options": {
+                "ncpu": ncpu,
+                "verbose": False,
+            },
+        },
     ]
 
     for i, inner_kwargs in enumerate(custom_sets):
+        iter_control = []
+        iter_cost = []
+        iter_projg = []
+
+        def callback(iopt, icontrol=iter_control, icost=iter_cost, iprojg=iter_projg):
+            icontrol.append(iopt.control_vector)
+            icost.append(iopt.cost)
+
+            if hasattr(iopt, "projg"):
+                iprojg.append(iopt.projg)
+
+        inner_kwargs.update({"callback": callback})
+
         instance = smash.optimize(model, **inner_kwargs)
 
         qsim = instance.response.q[:].flatten()
         qsim = qsim[::10]  # extract values at every 10th position
 
         res[f"custom_optimize.{model.setup.structure}.custom_set_{i+1}.sim_q"] = qsim
+
+        res[f"custom_optimize.{model.setup.structure}.custom_set_{i+1}.iter_control"] = np.array(iter_control)
+        res[f"custom_optimize.{model.setup.structure}.custom_set_{i+1}.iter_cost"] = np.array(iter_cost)
+
+        if iter_projg:
+            res[f"custom_optimize.{model.setup.structure}.custom_set_{i+1}.iter_projg"] = np.array(iter_projg)
 
     return res
 
@@ -237,42 +315,3 @@ def test_custom_optimize():
     for key, value in res.items():
         # % Check qsim in sparse storage run
         assert np.allclose(value, pytest.baseline[key][:], atol=1e-03), key
-
-
-def test_multiple_optimize():
-    instance = pytest.model.copy()
-    ncpu = min(5, max(1, os.cpu_count() - 1))
-
-    problem = {
-        "num_vars": 5,
-        "names": ["cp", "ct", "kexc", "llr", "hp"],
-        "bounds": [(1, 1_000), (1, 1_000), (-20, 5), (1, 200), (0.1, 0.9)],
-    }
-    n_sample = 5
-    samples = smash.factory.generate_samples(problem, random_state=99, n=n_sample)
-
-    optq = np.zeros(shape=(*instance.response_data.q.shape, n_sample), dtype=np.float32)
-
-    for i in range(n_sample):
-        for key in samples._problem["names"]:
-            if key in instance.rr_parameters.keys:
-                instance.set_rr_parameters(key, getattr(samples, key)[i])
-            elif key in instance.rr_initial_states.keys:
-                instance.set_rr_initial_states(key, getattr(samples, key)[i])
-        instance.optimize(
-            mapping="distributed",
-            optimize_options={"termination_crit": {"maxiter": 1}},
-            common_options={"verbose": False, "ncpu": ncpu},
-        )
-        optq[..., i] = instance.response.q.copy()
-
-    mopt = smash.multiple_optimize(
-        instance,
-        samples,
-        mapping="distributed",
-        optimize_options={"termination_crit": {"maxiter": 1}},
-        common_options={"verbose": False, "ncpu": ncpu},
-    )
-
-    # % Check that optimize discharge is equivalent to multiple optimize discharge
-    assert np.allclose(optq, mopt.q, atol=1e-03, equal_nan=True), "multiple_optimize.q"

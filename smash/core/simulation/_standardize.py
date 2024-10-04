@@ -9,12 +9,12 @@ import numpy as np
 import pandas as pd
 
 from smash._constant import (
+    ADAPTIVE_OPTIMIZER,
     DEFAULT_SIMULATION_COMMON_OPTIONS,
     DEFAULT_SIMULATION_COST_OPTIONS,
     DEFAULT_SIMULATION_RETURN_OPTIONS,
     DEFAULT_TERMINATION_CRIT,
     EVENT_SEG_KEYS,
-    F90_OPTIMIZER_CONTROL_TFM,
     F_PRECISION,
     FEASIBLE_RR_INITIAL_STATES,
     FEASIBLE_RR_PARAMETERS,
@@ -27,12 +27,14 @@ from smash._constant import (
     MAPPING,
     MAPPING_OPTIMIZER,
     METRICS,
+    NN_PARAMETERS_KEYS,
+    OPTIMIZABLE_NN_PARAMETERS,
     OPTIMIZABLE_RR_INITIAL_STATES,
     OPTIMIZABLE_RR_PARAMETERS,
     OPTIMIZABLE_SERR_MU_PARAMETERS,
     OPTIMIZABLE_SERR_SIGMA_PARAMETERS,
-    PY_OPTIMIZER,
-    PY_OPTIMIZER_CLASS,
+    OPTIMIZER_CLASS,
+    OPTIMIZER_CONTROL_TFM,
     REGIONAL_MAPPING,
     RR_PARAMETERS,
     RR_STATES,
@@ -140,19 +142,20 @@ def _standardize_simulation_optimize_options_parameters(
         for key in SERR_SIGMA_MAPPING_PARAMETERS[model.setup.serr_sigma_mapping]
         if OPTIMIZABLE_SERR_SIGMA_PARAMETERS[key]
     ]
-    available_parameters = available_rr_parameters + available_rr_initial_states
+    available_nn_parameters = OPTIMIZABLE_NN_PARAMETERS[max(0, model.setup.n_layers - 1)]
+
+    available_parameters = available_rr_parameters + available_rr_initial_states + available_nn_parameters
 
     if is_bayesian:
         available_parameters.extend(available_serr_mu_parameters + available_serr_sigma_parameters)
 
     if parameters is None:
+        default_parameters = available_rr_parameters + available_nn_parameters
+
         if is_bayesian:
-            parameters = np.array(
-                available_rr_parameters + available_serr_mu_parameters + available_serr_sigma_parameters,
-                ndmin=1,
-            )
-        else:
-            parameters = np.array(available_rr_parameters, ndmin=1)
+            default_parameters += available_serr_mu_parameters + available_serr_sigma_parameters
+
+        parameters = np.array(default_parameters, ndmin=1)
 
     else:
         if isinstance(parameters, (str, list, tuple, np.ndarray)):
@@ -181,13 +184,15 @@ def _standardize_simulation_optimize_options_parameters(
 def _standardize_simulation_optimize_options_bounds(
     model: Model, parameters: np.ndarray, bounds: dict | None, **kwargs
 ) -> dict:
+    bounded_parameters = [p for p in parameters if p not in NN_PARAMETERS_KEYS]
+
     if bounds is None:
         bounds = {}
 
     else:
         if isinstance(bounds, dict):
             for key, value in bounds.items():
-                if key in parameters:
+                if key in bounded_parameters:
                     if isinstance(value, (list, tuple, np.ndarray)) and len(value) == 2:
                         if value[0] >= value[1]:
                             raise ValueError(
@@ -203,8 +208,8 @@ def _standardize_simulation_optimize_options_bounds(
                         )
                 else:
                     raise ValueError(
-                        f"Unknown or non optimized parameter '{key}' in bounds optimize_options. "
-                        f"Choices: {parameters}"
+                        f"Unknown, non optimized, or unbounded parameter '{key}' in bounds optimize_options. "
+                        f"Choices: {bounded_parameters}"
                     )
         else:
             raise TypeError("bounds optimize_options must be a dictionary")
@@ -217,7 +222,7 @@ def _standardize_simulation_optimize_options_bounds(
     )
 
     for key, value in parameters_bounds.items():
-        if key in parameters:
+        if key in bounded_parameters:
             bounds.setdefault(key, value)
 
     # % Check that bounds are inside feasible domain and that bounds include parameter domain
@@ -225,21 +230,29 @@ def _standardize_simulation_optimize_options_bounds(
         if key in model.rr_parameters.keys:
             arr = model.get_rr_parameters(key)
             low, upp = FEASIBLE_RR_PARAMETERS[key]
+            # Do not check if a value is inside the feasible domain outside of active cells
+            mask = model.mesh.active_cell == 1
         elif key in model.rr_initial_states.keys:
             arr = model.get_rr_initial_states(key)
             low, upp = FEASIBLE_RR_INITIAL_STATES[key]
+            # Do not check if a value is inside the feasible domain outside of active cells
+            mask = model.mesh.active_cell == 1
         elif key in model.serr_sigma_parameters.keys:
             arr = model.get_serr_sigma_parameters(key)
             low, upp = FEASIBLE_SERR_SIGMA_PARAMETERS[key]
+            # Check all values
+            mask = np.ones(arr.shape, dtype=bool)
         elif key in model.serr_mu_parameters.keys:
             arr = model.get_serr_mu_parameters(key)
             low, upp = FEASIBLE_SERR_MU_PARAMETERS[key]
+            # Check all values
+            mask = np.ones(arr.shape, dtype=bool)
         # % In case we have other kind of parameters. Should be unreachable.
         else:
             pass
 
-        low_arr = np.min(arr)
-        upp_arr = np.max(arr)
+        low_arr = np.min(arr, where=mask, initial=np.inf)
+        upp_arr = np.max(arr, where=mask, initial=-np.inf)
         if (low_arr + F_PRECISION) < value[0] or (upp_arr - F_PRECISION) > value[1]:
             raise ValueError(
                 f"Invalid bounds values for parameter '{key}'. Bounds domain [{value[0]}, {value[1]}] does "
@@ -252,22 +265,22 @@ def _standardize_simulation_optimize_options_bounds(
                 f"included in the feasible domain ]{low}, {upp}[ in bounds optimize_options"
             )
 
-    bounds = {key: bounds[key] for key in parameters}
+    bounds = {key: bounds[key] for key in bounded_parameters}
 
     return bounds
 
 
 def _standardize_simulation_optimize_options_control_tfm(
-    optimizer: str, control_tfm: str | None, **kwargs
+    mapping: str, optimizer: str, control_tfm: str | None, **kwargs
 ) -> str | None:
     if control_tfm is None:
-        control_tfm = F90_OPTIMIZER_CONTROL_TFM[optimizer][0]
+        control_tfm = OPTIMIZER_CONTROL_TFM[(mapping, optimizer)][0]
     else:
         if isinstance(control_tfm, str):
-            if control_tfm.lower() not in F90_OPTIMIZER_CONTROL_TFM[optimizer]:
+            if control_tfm.lower() not in OPTIMIZER_CONTROL_TFM[(mapping, optimizer)]:
                 raise ValueError(
                     f"Unknown transformation '{control_tfm}' in control_tfm optimize_options. "
-                    f"Choices: {F90_OPTIMIZER_CONTROL_TFM[optimizer]}"
+                    f"Choices: {OPTIMIZER_CONTROL_TFM[(mapping, optimizer)]}"
                 )
         else:
             raise TypeError("control_tfm optimize_options must be a str")
@@ -317,88 +330,65 @@ def _standardize_simulation_optimize_options_descriptor(
 def _standardize_simulation_optimize_options_net(
     model: Model, bounds: dict, net: Net | None, **kwargs
 ) -> Net:
-    nd = model.setup.nd
+    nrow, ncol, nd = model.physio_data.descriptor.shape
 
     bound_values = list(bounds.values())
     ncv = len(bound_values)
 
-    active_mask = np.where(model.mesh.active_cell == 1)
-    ntrain = active_mask[0].shape[0]
-
-    if net is None:  # default graph
+    if net is None:
+        # % Set default graph
         net = Net()
 
-        n_neurons = round(np.sqrt(ntrain * nd) * 2 / 3)
+        net.add_dense(nd * 3, input_shape=nd, activation="relu")
+        net.add_dense(round(np.sqrt(nd * ncv) * np.log(nrow * ncol)), activation="relu")
+        net.add_dense(ncv * 3, activation="relu")
+        net.add_dense(ncv, activation="tanh")
+        net.add_scale(bound_values)
 
-        net.add(
-            layer="dense",
-            options={
-                "input_shape": (nd,),
-                "neurons": n_neurons,
-                "kernel_initializer": "glorot_uniform",
-            },
-        )
-        net.add(layer="activation", options={"name": "relu"})
+    elif isinstance(net, Net):
+        if net.layers:
+            # % Check input shape
+            net_in = net.layers[0].input_shape
 
-        net.add(
-            layer="dense",
-            options={
-                "neurons": round(n_neurons / 2),
-                "kernel_initializer": "glorot_uniform",
-            },
-        )
-        net.add(layer="activation", options={"name": "relu"})
+            x_in = (nrow, ncol, nd) if len(net_in) == 3 else (nd,)  # in case of cnn and mlp resp.
 
-        net.add(
-            layer="dense",
-            options={"neurons": ncv, "kernel_initializer": "glorot_uniform"},
-        )
-        net.add(layer="activation", options={"name": "sigmoid"})
+            if net_in != x_in:
+                raise ValueError(
+                    f"net optimize_options: Inconsistent shapes between the input layer ({net_in}) "
+                    f"and the input data ({x_in}): {net_in} != {x_in}"
+                )
 
-        net.add(
-            layer="scale",
-            options={"bounds": bound_values},
-        )
+            # % Check output shape
+            net_out = net.layers[-1].output_shape()
 
-    elif not isinstance(net, Net):
-        raise TypeError(f"net optimize_options: Unknown network {net}")
+            if net_out[-1] != ncv:
+                raise ValueError(
+                    f"net optimize_options: Inconsistent values between the number of output features "
+                    f"({net_out[-1]}) and the number of parameters ({ncv}): {net_out[-1]} != {ncv}"
+                )
 
-    elif not net.layers:
-        raise ValueError("net optimize_options: The graph has not been set yet")
+            # % Check bounds constraints
+            if hasattr(net.layers[-1], "_scale_func"):
+                net_bounds = np.transpose(
+                    [net.layers[-1]._scale_func.lower, net.layers[-1]._scale_func.upper]
+                )
+
+                diff = np.not_equal(net_bounds, bound_values)
+
+                for i, name in enumerate(bounds):
+                    if diff[i].any():
+                        warnings.warn(
+                            f"net optimize_options: Inconsistent values between the bounds in scaling layer "
+                            f"and the parameter bound for {name}: {net_bounds[i]} != {bound_values[i]}. "
+                            f"Ignoring default bounds for scaling layer.",
+                            stacklevel=2,
+                        )
+
+        else:
+            raise ValueError("net optimize_options: The graph has not been set yet")
 
     else:
-        # % check input shape
-        ips = net.layers[0].input_shape
-
-        if ips[0] != nd:
-            raise ValueError(
-                f"net optimize_options: Inconsistent value between the number of input layer ({ips[0]}) and "
-                f"the number of descriptors ({nd}): {ips[0]} != {nd}"
-            )
-
-        # % check output shape
-        ios = net.layers[-1].output_shape()
-
-        if ios[0] != ncv:
-            raise ValueError(
-                f"net optimize_options: Inconsistent value between the number of output layer ({ios[0]}) and "
-                f"the number of parameters ({ncv}): {ios[0]} != {ncv}"
-            )
-
-        # % check bounds constraints
-        if hasattr(net.layers[-1], "_scale_func"):
-            net_bounds = net.layers[-1]._scale_func._bounds
-
-            diff = np.not_equal(net_bounds, bound_values)
-
-            for i, name in enumerate(bounds.keys()):
-                if diff[i].any():
-                    warnings.warn(
-                        f"net optimize_options: Inconsistent value(s) between the bound in scaling layer and "
-                        f"the parameter bound for {name}: {net_bounds[i]} != {bound_values[i]}. Ignoring "
-                        f"default bounds for scaling layer.",
-                        stacklevel=2,
-                    )
+        raise TypeError("net optimize_options must be a smash.factory.Net object")
 
     return net
 
@@ -412,7 +402,7 @@ def _standardize_simulation_optimize_options_learning_rate(
             raise ValueError("learning_rate optimize_options must be greater than 0")
     else:
         if learning_rate is None:
-            opt_class = eval(PY_OPTIMIZER_CLASS[PY_OPTIMIZER.index(optimizer)])
+            opt_class = eval(OPTIMIZER_CLASS[ADAPTIVE_OPTIMIZER.index(optimizer)])
             learning_rate = opt_class().learning_rate
 
         else:
@@ -446,8 +436,8 @@ def _standardize_simulation_optimize_options_termination_crit(
     else:
         if isinstance(termination_crit, dict):
             pop_keys = []
-            for key in termination_crit.keys():
-                if key not in DEFAULT_TERMINATION_CRIT[optimizer].keys():
+            for key in termination_crit:
+                if key not in DEFAULT_TERMINATION_CRIT[optimizer]:
                     pop_keys.append(key)
                     warnings.warn(
                         f"Unknown termination_crit key '{key}' for optimizer '{optimizer}'. "
@@ -502,17 +492,6 @@ def _standardize_simulation_optimize_options_termination_crit_pgtol(pgtol: Numer
     return pgtol
 
 
-def _standardize_simulation_optimize_options_termination_crit_epochs(epochs: Numeric, **kwargs) -> float:
-    if isinstance(epochs, (int, float)):
-        epochs = int(epochs)
-        if epochs < 0:
-            raise ValueError("epochs termination_crit must be greater than or equal to 0")
-    else:
-        raise TypeError("epochs termination_crit must be of Numeric type (int, float)")
-
-    return epochs
-
-
 def _standardize_simulation_optimize_options_termination_crit_early_stopping(
     early_stopping: Numeric, **kwargs
 ) -> int:
@@ -540,7 +519,7 @@ def _standardize_simulation_optimize_options(
     else:
         if isinstance(optimize_options, dict):
             pop_keys = []
-            for key in optimize_options.keys():
+            for key in optimize_options:
                 if key not in SIMULATION_OPTIMIZE_OPTIONS_KEYS[(mapping, optimizer)]:
                     pop_keys.append(key)
                     warnings.warn(
@@ -789,7 +768,11 @@ def _standardize_simulation_cost_options_end_warmup(
 
 
 def _standardize_simulation_cost_options_gauge(
-    model: Model, func_name: str, gauge: str | ListLike, end_warmup: pd.Timestamp, **kwargs
+    model: Model,
+    func_name: str,
+    gauge: str | ListLike,
+    end_warmup: pd.Timestamp,
+    **kwargs,
 ) -> np.ndarray:
     if isinstance(gauge, str):
         if gauge == "dws":
@@ -922,7 +905,7 @@ def _standardize_simulation_cost_options(model: Model, func_name: str, cost_opti
         if isinstance(cost_options, dict):
             pop_keys = []
             for key, _ in cost_options.items():
-                if key not in DEFAULT_SIMULATION_COST_OPTIONS[func_name].keys():
+                if key not in DEFAULT_SIMULATION_COST_OPTIONS[func_name]:
                     pop_keys.append(key)
                     warnings.warn(
                         f"Unknown cost_options key '{key}'. "
@@ -982,8 +965,8 @@ def _standardize_simulation_common_options(common_options: dict | None) -> dict:
     else:
         if isinstance(common_options, dict):
             pop_keys = []
-            for key in common_options.keys():
-                if key not in DEFAULT_SIMULATION_COMMON_OPTIONS.keys():
+            for key in common_options:
+                if key not in DEFAULT_SIMULATION_COMMON_OPTIONS:
                     pop_keys.append(key)
                     warnings.warn(
                         f"Unknown common_options key '{key}': "
@@ -1068,8 +1051,8 @@ def _standardize_simulation_return_options(model: Model, func_name: str, return_
     else:
         if isinstance(return_options, dict):
             pop_keys = []
-            for key in return_options.keys():
-                if key not in DEFAULT_SIMULATION_RETURN_OPTIONS[func_name].keys():
+            for key in return_options:
+                if key not in DEFAULT_SIMULATION_RETURN_OPTIONS[func_name]:
                     pop_keys.append(key)
                     warnings.warn(
                         f"Unknown return_options key '{key}': "
@@ -1094,11 +1077,13 @@ def _standardize_simulation_return_options(model: Model, func_name: str, return_
 
 
 def _standardize_simulation_parameters_feasibility(model: Model):
+    mask = model.mesh.active_cell == 1
     for key in model.rr_parameters.keys:
         arr = model.get_rr_parameters(key)
         low, upp = FEASIBLE_RR_PARAMETERS[key]
-        low_arr = np.min(arr)
-        upp_arr = np.max(arr)
+        # Do not check if a value is inside the feasible domain outside of active cells
+        low_arr = np.min(arr, where=mask, initial=np.inf)
+        upp_arr = np.max(arr, where=mask, initial=-np.inf)
 
         if (low_arr + F_PRECISION) <= low or (upp_arr - F_PRECISION) >= upp:
             raise ValueError(
@@ -1109,8 +1094,9 @@ def _standardize_simulation_parameters_feasibility(model: Model):
     for key in model.rr_initial_states.keys:
         arr = model.get_rr_initial_states(key)
         low, upp = FEASIBLE_RR_INITIAL_STATES[key]
-        low_arr = np.min(arr)
-        upp_arr = np.max(arr)
+        # Do not check if a value is inside the feasible domain outside of active cells
+        low_arr = np.min(arr, where=mask, initial=np.inf)
+        upp_arr = np.max(arr, where=mask, initial=-np.inf)
 
         if (low_arr + F_PRECISION) <= low or (upp_arr - F_PRECISION) >= upp:
             raise ValueError(
@@ -1132,6 +1118,7 @@ def _standardize_simulation_parameters_feasibility(model: Model):
                 f"Invalid value for model serr_mu_parameter '{key}'. serr_mu_parameter domain "
                 f"[{low_arr}, {upp_arr}] is not included in the feasible domain ]{low}, {upp}["
             )
+
     for key in model.serr_sigma_parameters.keys:
         arr = model.get_serr_sigma_parameters(key)
         # % Skip if size == 0, i.e. no gauge
@@ -1158,7 +1145,7 @@ def _standardize_simulation_optimize_options_finalize(
     if model.setup.nd == 0 and mapping in REGIONAL_MAPPING:
         raise ValueError(f"Physiographic descriptors are required for optimization with {mapping} mapping")
 
-    descriptor_present = "descriptor" in optimize_options.keys()
+    descriptor_present = "descriptor" in optimize_options
 
     # % Handle parameters
     # % rr parameters
@@ -1202,6 +1189,13 @@ def _standardize_simulation_optimize_options_finalize(
                     if desc in optimize_options["descriptor"][key]:
                         optimize_options["rr_initial_states_descriptor"][j, i] = 1
 
+    # % nn parameters
+    optimize_options["nn_parameters"] = np.zeros(shape=len(NN_PARAMETERS_KEYS), dtype=np.int32)
+
+    for i, key in enumerate(NN_PARAMETERS_KEYS):
+        if key in optimize_options["parameters"]:
+            optimize_options["nn_parameters"][i] = 1
+
     # % serr mu parameters
     optimize_options["serr_mu_parameters"] = np.zeros(shape=model.setup.nsep_mu, dtype=np.int32)
     optimize_options["l_serr_mu_parameters"] = np.zeros(shape=model.setup.nsep_mu, dtype=np.float32)
@@ -1233,8 +1227,8 @@ def _standardize_simulation_cost_options_finalize(model: Model, func_name: str, 
     if is_bayesian:
         cost_options["bayesian"] = True
 
-    cost_options["njoc"] = cost_options["jobs_cmpt"].size if "jobs_cmpt" in cost_options.keys() else 0
-    cost_options["njrc"] = cost_options["jreg_cmpt"].size if "jreg_cmpt" in cost_options.keys() else 0
+    cost_options["njoc"] = cost_options["jobs_cmpt"].size if "jobs_cmpt" in cost_options else 0
+    cost_options["njrc"] = cost_options["jreg_cmpt"].size if "jreg_cmpt" in cost_options else 0
 
     if any(f.startswith("E") for f in cost_options.get("jobs_cmpt", [])):
         info_event = _mask_event(model=model, **cost_options["event_seg"])
@@ -1310,7 +1304,7 @@ def _standardize_simulation_return_options_finalize(model: Model, return_options
 
     pop_keys = [
         k
-        for k in return_options.keys()
+        for k in return_options
         if k not in ["nmts", "mask_time_step", "time_step_to_returns_time_step", "time_step", "fkeys", "keys"]
     ]
     for key in pop_keys:

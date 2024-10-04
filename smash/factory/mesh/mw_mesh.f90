@@ -34,7 +34,7 @@ contains
 
     end subroutine latlon_dxdy
 
-    recursive subroutine mask_upstream_cells(nrow, ncol, flwdir, row, col, mask)
+    recursive subroutine mask_upstream_cells(nrow, ncol, flwdir, row, col, mask, sink)
 
         implicit none
 
@@ -42,6 +42,7 @@ contains
         integer, dimension(nrow, ncol), intent(in) :: flwdir
         integer, intent(in) :: row, col
         integer, dimension(nrow, ncol), intent(inout) :: mask
+        logical, intent(inout) :: sink
 
         integer, dimension(8) :: drow = (/1, 1, 0, -1, -1, -1, 0, 1/)
         integer, dimension(8) :: dcol = (/0, -1, -1, -1, 0, 1, 1, 1/)
@@ -54,18 +55,26 @@ contains
             row_imd = row + drow(i)
             col_imd = col + dcol(i)
 
+            ! % Bounds
             if (row_imd .lt. 1 .or. row_imd .gt. nrow .or. col_imd .lt. 1 .or. col_imd .gt. ncol) cycle
 
-            if (abs(flwdir(row, col) - flwdir(row_imd, col_imd)) .eq. 4) cycle
+            ! % Non upstream cell
+            if (flwdir(row_imd, col_imd) .ne. i) cycle
 
-            if (flwdir(row_imd, col_imd) .eq. i) call mask_upstream_cells(nrow, ncol, flwdir, row_imd, col_imd, mask)
+            ! % Upstream sink cell, must return
+            if (mask(row_imd, col_imd) .eq. 1) then
+                sink = .true.
+                return
+            end if
+
+            call mask_upstream_cells(nrow, ncol, flwdir, row_imd, col_imd, mask, sink)
 
         end do
 
     end subroutine mask_upstream_cells
 
     subroutine catchment_dln(nrow, ncol, flwdir, dx, dy, row, col, area, &
-    & max_depth, mask_dln, row_dln, col_dln)
+    & max_depth, mask_dln, row_dln, col_dln, sink_dln)
 
         implicit none
 
@@ -77,10 +86,12 @@ contains
         integer, intent(in) :: max_depth
         integer, dimension(nrow, ncol), intent(out) :: mask_dln
         integer, intent(out) :: col_dln, row_dln
+        logical, intent(out) :: sink_dln
 
         integer, dimension(nrow, ncol) :: mask_dln_imd
         integer :: i, j, row_imd, col_imd
         real(4) :: min_tol, tol
+        logical :: sink_dln_imd
 
         !% Transform from Python to FORTRAN index
         row = row + 1
@@ -95,11 +106,17 @@ contains
                 row_imd = row + j
                 col_imd = col + i
                 mask_dln_imd = 0
+                sink_dln_imd = .false.
 
                 if (row_imd .lt. 1 .or. row_imd .gt. nrow .or. col_imd .lt. 1 .or. col_imd .gt. ncol) cycle
 
                 call mask_upstream_cells(nrow, ncol, flwdir, row_imd, &
-                & col_imd, mask_dln_imd)
+                & col_imd, mask_dln_imd, sink_dln_imd)
+
+                if (sink_dln_imd) then
+                    sink_dln = .true.
+                    cycle
+                end if
 
                 tol = abs(area - sum(mask_dln_imd*dx*dy))/area
 
@@ -469,5 +486,46 @@ contains
         end do
 
     end subroutine flow_partition_variable
+
+    !% This function only check "pair" of cells. A sink can be more than 2 cells ...
+    subroutine detect_sink(nrow, ncol, flwdir, sink)
+
+        implicit none
+
+        integer, intent(in) :: nrow, ncol
+        integer, dimension(nrow, ncol), intent(in) :: flwdir
+        integer, dimension(nrow, ncol), intent(out) :: sink
+
+        integer :: row, col, i, row_imd, col_imd
+        integer, dimension(3) :: drow = (/0, 1, 1/)
+        integer, dimension(3) :: dcol = (/1, 1, 0/)
+        integer, dimension(3) :: dir = (/3, 4, 5/)
+        integer, dimension(3) :: opposite_dir = (/7, 8, 1/)
+
+        sink = 0
+
+        do col = 1, ncol - 1
+
+            do row = 1, nrow - 1
+
+                do i = 1, 3
+
+                    row_imd = row + drow(i)
+                    col_imd = col + dcol(i)
+
+                    if (flwdir(row_imd, col_imd) .eq. opposite_dir(i) .and. flwdir(row, col) .eq. dir(i)) then
+
+                        sink(row, col) = 1
+                        sink(row_imd, col_imd) = 1
+
+                    end if
+
+                end do
+
+            end do
+
+        end do
+
+    end subroutine detect_sink
 
 end module mw_mesh

@@ -34,6 +34,7 @@
 !%      - multi_polynomial_rr_parameters_get_control_size
 !%      - multi_polynomial_rr_initial_states_get_control_size
 !%      - serr_mu_parameters_get_control_size
+!%      - nn_parameters_get_control_size
 !%      - get_control_sizes
 !%      - uniform_rr_parameters_fill_control
 !%      - uniform_rr_initial_states_fill_control
@@ -45,6 +46,7 @@
 !%      - multi_polynomial_rr_initial_states_fill_control
 !%      - serr_mu_parameters_fill_control
 !%      - serr_sigma_parameters_fill_control
+!%      - nn_parameters_fill_control
 !%      - fill_control
 !%      - uniform_rr_parameters_fill_parameters
 !%      - uniform_rr_initial_states_fill_parameters
@@ -56,6 +58,7 @@
 !%      - multi_polynomial_rr_initial_states_fill_parameters
 !%      - serr_mu_parameters_fill_parameters
 !%      - serr_sigma_parameters_fill_parameters
+!%      - nn_parameters_fill_parameters
 !%      - fill_parameters
 
 module mwd_parameters_manipulation
@@ -737,6 +740,29 @@ contains
 
     end subroutine serr_sigma_parameters_get_control_size
 
+    subroutine nn_parameters_get_control_size(setup, options, n)
+
+        implicit none
+
+        type(SetupDT), intent(in) :: setup
+        type(OptionsDT), intent(in) :: options
+        integer, intent(inout) :: n
+
+        integer :: i, n_w, n_b
+
+        n = 0
+
+        do i = 0, size(setup%hidden_neuron)
+
+            n_w = options%optimize%nn_parameters(2*i + 1)*setup%neurons(i + 2)*setup%neurons(i + 1)
+            n_b = options%optimize%nn_parameters(2*i + 2)*setup%neurons(i + 2)
+
+            n = n + n_w + n_b
+
+        end do
+
+    end subroutine nn_parameters_get_control_size
+
     subroutine get_control_sizes(setup, mesh, options, nbk)
 
         implicit none
@@ -768,11 +794,18 @@ contains
             call multi_polynomial_rr_parameters_get_control_size(setup, options, nbk(1))
             call multi_polynomial_rr_initial_states_get_control_size(setup, options, nbk(2))
 
+        case ("ann")
+
+            nbk(1) = 0
+            nbk(2) = 0
+
         end select
 
         ! Directly working with hyper parameters
         call serr_mu_parameters_get_control_size(options, nbk(3))
         call serr_sigma_parameters_get_control_size(options, nbk(4))
+
+        call nn_parameters_get_control_size(setup, options, nbk(5))
 
     end subroutine get_control_sizes
 
@@ -803,7 +836,7 @@ contains
             parameters%control%l(j) = options%optimize%l_rr_parameters(i)
             parameters%control%u(j) = options%optimize%u_rr_parameters(i)
             parameters%control%nbd(j) = 2
-            parameters%control%name(j) = trim(parameters%rr_parameters%keys(i))//"0"
+            parameters%control%name(j) = trim(parameters%rr_parameters%keys(i))//"-0"
 
         end do
 
@@ -836,7 +869,7 @@ contains
             parameters%control%l(j) = options%optimize%l_rr_initial_states(i)
             parameters%control%u(j) = options%optimize%u_rr_initial_states(i)
             parameters%control%nbd(j) = 2
-            parameters%control%name(j) = trim(parameters%rr_initial_states%keys(i))//"0"
+            parameters%control%name(j) = trim(parameters%rr_initial_states%keys(i))//"-0"
 
         end do
 
@@ -873,7 +906,7 @@ contains
                     parameters%control%l(j) = options%optimize%l_rr_parameters(i)
                     parameters%control%u(j) = options%optimize%u_rr_parameters(i)
                     parameters%control%nbd(j) = 2
-                    write (name, '(a,i0,a,i0)') trim(parameters%rr_parameters%keys(i)), row, "-", col
+                    write (name, '(a,a,i0,a,i0)') trim(parameters%rr_parameters%keys(i)), "-", row, "-", col
                     parameters%control%name(j) = name
 
                 end do
@@ -915,7 +948,7 @@ contains
                     parameters%control%l(j) = options%optimize%l_rr_initial_states(i)
                     parameters%control%u(j) = options%optimize%u_rr_initial_states(i)
                     parameters%control%nbd(j) = 2
-                    write (name, '(a,i0,a,i0)') trim(parameters%rr_initial_states%keys(i)), row, "-", col
+                    write (name, '(a,a,i0,a,i0)') trim(parameters%rr_initial_states%keys(i)), "-", row, "-", col
                     parameters%control%name(j) = name
 
                 end do
@@ -956,7 +989,7 @@ contains
 
             call inv_scaled_sigmoid(y, l, u, parameters%control%x(j))
             parameters%control%nbd(j) = 0
-            parameters%control%name(j) = trim(parameters%rr_parameters%keys(i))//"0"
+            parameters%control%name(j) = trim(parameters%rr_parameters%keys(i))//"-0"
 
             do k = 1, setup%nd
 
@@ -1005,7 +1038,7 @@ contains
 
             call inv_scaled_sigmoid(y, l, u, parameters%control%x(j))
             parameters%control%nbd(j) = 0
-            parameters%control%name(j) = trim(parameters%rr_initial_states%keys(i))//"0"
+            parameters%control%name(j) = trim(parameters%rr_initial_states%keys(i))//"-0"
 
             do k = 1, setup%nd
 
@@ -1054,7 +1087,7 @@ contains
 
             call inv_scaled_sigmoid(y, l, u, parameters%control%x(j))
             parameters%control%nbd(j) = 0
-            parameters%control%name(j) = trim(parameters%rr_parameters%keys(i))//"0"
+            parameters%control%name(j) = trim(parameters%rr_parameters%keys(i))//"-0"
 
             do k = 1, setup%nd
 
@@ -1110,7 +1143,7 @@ contains
 
             call inv_scaled_sigmoid(y, l, u, parameters%control%x(j))
             parameters%control%nbd(j) = 0
-            parameters%control%name(j) = trim(parameters%rr_initial_states%keys(i))//"0"
+            parameters%control%name(j) = trim(parameters%rr_initial_states%keys(i))//"-0"
 
             do k = 1, setup%nd
 
@@ -1208,6 +1241,106 @@ contains
 
     end subroutine serr_sigma_parameters_fill_control
 
+    subroutine nn_parameters_fill_control(setup, options, parameters)
+
+        implicit none
+
+        type(SetupDT), intent(in) :: setup
+        type(OptionsDT), intent(in) :: options
+        type(ParametersDT), intent(inout) :: parameters
+
+        character(lchar) :: name
+        integer :: j, k, l
+
+        ! NN parameters is fifth control kind
+        j = sum(parameters%control%nbk(1:4))
+
+        if (options%optimize%nn_parameters(1) .eq. 1) then
+            do k = 1, setup%neurons(1)
+
+                do l = 1, setup%neurons(2)
+
+                    j = j + 1
+                    parameters%control%x(j) = parameters%nn_parameters%weight_1(l, k)
+                    parameters%control%nbd(j) = 0
+                    write (name, '(a,i0,a,i0)') "weight_1-", l, "-", k
+                    parameters%control%name(j) = name
+
+                end do
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(2) .eq. 1) then
+            do k = 1, setup%neurons(2)
+
+                j = j + 1
+                parameters%control%x(j) = parameters%nn_parameters%bias_1(k)
+                parameters%control%nbd(j) = 0
+                write (name, '(a,i0)') "bias_1-", k
+                parameters%control%name(j) = name
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(3) .eq. 1) then
+            do k = 1, setup%neurons(2)
+
+                do l = 1, setup%neurons(3)
+
+                    j = j + 1
+                    parameters%control%x(j) = parameters%nn_parameters%weight_2(l, k)
+                    parameters%control%nbd(j) = 0
+                    write (name, '(a,i0,a,i0)') "weight_2-", l, "-", k
+                    parameters%control%name(j) = name
+
+                end do
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(4) .eq. 1) then
+            do k = 1, setup%neurons(3)
+
+                j = j + 1
+                parameters%control%x(j) = parameters%nn_parameters%bias_2(k)
+                parameters%control%nbd(j) = 0
+                write (name, '(a,i0)') "bias_2-", k
+                parameters%control%name(j) = name
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(5) .eq. 1) then
+            do k = 1, setup%neurons(3)
+
+                do l = 1, setup%neurons(4)
+
+                    j = j + 1
+                    parameters%control%x(j) = parameters%nn_parameters%weight_3(l, k)
+                    parameters%control%nbd(j) = 0
+                    write (name, '(a,i0,a,i0)') "weight_3-", l, "-", k
+                    parameters%control%name(j) = name
+
+                end do
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(6) .eq. 1) then
+            do k = 1, setup%neurons(4)
+
+                j = j + 1
+                parameters%control%x(j) = parameters%nn_parameters%bias_3(k)
+                parameters%control%nbd(j) = 0
+                write (name, '(a,i0)') "bias_3-", k
+                parameters%control%name(j) = name
+
+            end do
+        end if
+
+    end subroutine nn_parameters_fill_control
+
     subroutine fill_control(setup, mesh, input_data, parameters, options)
 
         implicit none
@@ -1245,6 +1378,8 @@ contains
         ! Directly working with hyper parameters
         call serr_mu_parameters_fill_control(setup, mesh, parameters, options)
         call serr_sigma_parameters_fill_control(setup, mesh, parameters, options)
+
+        call nn_parameters_fill_control(setup, options, parameters)
 
         ! Store background
         parameters%control%x_bkg = parameters%control%x
@@ -1647,6 +1782,87 @@ contains
 
     end subroutine serr_sigma_parameters_fill_parameters
 
+    subroutine nn_parameters_fill_parameters(setup, options, parameters)
+
+        implicit none
+
+        type(SetupDT), intent(in) :: setup
+        type(OptionsDT), intent(in) :: options
+        type(ParametersDT), intent(inout) :: parameters
+
+        integer :: j, k, l
+
+        ! NN parameters is fifth control kind
+        j = sum(parameters%control%nbk(1:4))
+
+        if (options%optimize%nn_parameters(1) .eq. 1) then
+            do k = 1, setup%neurons(1)
+
+                do l = 1, setup%neurons(2)
+
+                    j = j + 1
+                    parameters%nn_parameters%weight_1(l, k) = parameters%control%x(j)
+
+                end do
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(2) .eq. 1) then
+            do k = 1, setup%neurons(2)
+
+                j = j + 1
+                parameters%nn_parameters%bias_1(k) = parameters%control%x(j)
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(3) .eq. 1) then
+            do k = 1, setup%neurons(2)
+
+                do l = 1, setup%neurons(3)
+
+                    j = j + 1
+                    parameters%nn_parameters%weight_2(l, k) = parameters%control%x(j)
+
+                end do
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(4) .eq. 1) then
+            do k = 1, setup%neurons(3)
+
+                j = j + 1
+                parameters%nn_parameters%bias_2(k) = parameters%control%x(j)
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(5) .eq. 1) then
+            do k = 1, setup%neurons(3)
+
+                do l = 1, setup%neurons(4)
+
+                    j = j + 1
+                    parameters%nn_parameters%weight_3(l, k) = parameters%control%x(j)
+
+                end do
+
+            end do
+        end if
+
+        if (options%optimize%nn_parameters(6) .eq. 1) then
+            do k = 1, setup%neurons(4)
+
+                j = j + 1
+                parameters%nn_parameters%bias_3(k) = parameters%control%x(j)
+
+            end do
+        end if
+
+    end subroutine nn_parameters_fill_parameters
+
     subroutine fill_parameters(setup, mesh, input_data, parameters, options)
 
         implicit none
@@ -1684,6 +1900,8 @@ contains
         ! Directly working with hyper parameters
         call serr_mu_parameters_fill_parameters(setup, mesh, parameters, options)
         call serr_sigma_parameters_fill_parameters(setup, mesh, parameters, options)
+
+        call nn_parameters_fill_parameters(setup, options, parameters)
 
     end subroutine fill_parameters
 

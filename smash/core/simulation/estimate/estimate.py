@@ -14,13 +14,12 @@ from smash.core.simulation.estimate._tools import (
     _forward_run_with_estimated_parameters,
     _lcurve_forward_run_with_estimated_parameters,
 )
-from smash.core.simulation.optimize.optimize import MultipleOptimize
-from smash.core.simulation.run.run import MultipleForwardRun
 
 if TYPE_CHECKING:
     from typing import Any
 
     from smash.core.model.model import Model
+    from smash.core.simulation.run.run import MultipleForwardRun
     from smash.util._typing import ListLike, Numeric
 
 __all__ = ["MultisetEstimate", "multiset_estimate"]
@@ -42,7 +41,7 @@ class MultisetEstimate:
         An array of shape *(nrow, ncol, n)* representing simulated discharges on the domain for each
         **time_step**.
 
-    internal_fluxes: `dict[str, numpy.ndarray]`
+    internal_fluxes : `dict[str, numpy.ndarray]`
         A dictionary where keys are the names of the internal fluxes and the values are array of
         shape *(nrow, ncol, n)* representing an internal flux on the domain for each **time_step**.
 
@@ -52,7 +51,7 @@ class MultisetEstimate:
     jobs : `float`
         Cost observation component value.
 
-    lcurve_multiset : dict[str, Any]
+    lcurve_multiset : `dict[str, Any]`
         A dictionary containing the multiset estimate L-curve data. The elements are:
 
         alpha : `float` or `numpy.ndarray`
@@ -99,7 +98,7 @@ class MultisetEstimate:
 @_multiset_estimate_doc_appender
 def multiset_estimate(
     model: Model,
-    multiset: MultipleForwardRun | MultipleOptimize,
+    multiset: MultipleForwardRun,
     alpha: Numeric | ListLike | None = None,
     common_options: dict[str, Any] | None = None,
     return_options: dict[str, Any] | None = None,
@@ -111,12 +110,12 @@ def multiset_estimate(
     if ret_multiset_estimate is None:
         return wmodel
     else:
-        return wmodel, ret_multiset_estimate
+        return (wmodel, ret_multiset_estimate)
 
 
 def _multiset_estimate(
     model: Model,
-    multiset: MultipleForwardRun | MultipleOptimize,
+    multiset: MultipleForwardRun,
     alpha: float | np.ndarray,
     common_options: dict,
     return_options: dict,
@@ -125,30 +124,8 @@ def _multiset_estimate(
     if common_options["verbose"]:
         print("</> Multiple Set Estimate")
 
-    # % Prepare data
-    if isinstance(multiset, MultipleForwardRun):
-        optimized_parameters = {p: None for p in multiset._samples._problem["names"]}
-
-        prior_data = dict(
-            zip(
-                optimized_parameters.keys(),
-                [
-                    np.tile(getattr(multiset._samples, p), (*model.mesh.flwdir.shape, 1))
-                    for p in optimized_parameters.keys()
-                ],
-            )
-        )
-
-    elif isinstance(multiset, MultipleOptimize):
-        optimized_parameters = multiset.parameters
-
-        prior_data = multiset.parameters
-
-    else:  # In case we have other kind of multiset. Should be unreachable
-        pass
-
     # % Compute density
-    density = _compute_density(multiset._samples, optimized_parameters, model.mesh.active_cell)
+    density = _compute_density(multiset._samples, multiset._spatialized_samples, model.mesh.active_cell)
 
     # % Multiple set estimate
     if isinstance(alpha, float):
@@ -163,7 +140,7 @@ def _multiset_estimate(
     ret_forward_run, lcurve_multiset = estimator(
         alpha,
         model,
-        prior_data,
+        multiset._spatialized_samples,
         density,
         multiset.cost,
         multiset._cost_options,

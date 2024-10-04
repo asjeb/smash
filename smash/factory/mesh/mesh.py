@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
+import rasterio
 
 from smash.factory.mesh._libmesh import mw_mesh
-from smash.factory.mesh._standardize import _standardize_generate_mesh_args
+from smash.factory.mesh._standardize import (
+    _standardize_detect_sink_args,
+    _standardize_generate_mesh_args,
+)
 from smash.factory.mesh._tools import (
     _get_array,
     _get_catchment_slice_window,
@@ -18,11 +23,121 @@ from smash.factory.mesh._tools import (
 if TYPE_CHECKING:
     from typing import Any
 
-    import rasterio
-
     from smash.util._typing import AlphaNumeric, FilePath, ListLike, Numeric
 
-__all__ = ["generate_mesh"]
+__all__ = ["detect_sink", "generate_mesh"]
+
+
+def detect_sink(flwdir_path: FilePath, output_path: FilePath | None = None) -> np.ndarray:
+    """
+    Detect the sink cells in a flow direction file.
+
+    Sinks in flow direction lead to numerical issues in the routing scheme and should be removed before
+    generating the mesh.
+
+    Parameters
+    ----------
+    flwdir_path : `str`
+        Path to the flow directions file. The flow direction convention is the following:
+
+        .. image:: ../../../_static/flwdir_convention.png
+            :width: 100
+            :align: center
+
+    output_path : `str` or None, default None
+        Path to the output file. If given, a raster file, in ``tif`` format, is written representing the sink
+        cells.
+
+    Returns
+    -------
+    sink : `numpy.ndarray`
+        An array of shape *(nrow, ncol)*  containing a mask of sink cells.
+
+        - ``0``: non-sink cell
+        - ``1``: sink cell
+
+    See Also
+    --------
+    smash.factory.generate_mesh : Automatic mesh generation.
+
+    Examples
+    --------
+    >>> from smash.factory import load_dataset, detect_sink
+
+    Retrieve a path to a flow direction file. A pre-processed file is available in the `smash` package (the
+    path is updated for each user).
+
+    >>> flwdir = load_dataset("flwdir")
+    flwdir
+
+    Detect the sink cells in the flow direction file.
+
+    >>> sink = detect_sink(flwdir)
+    >>> sink
+    array([[0, 0, 0, ..., 0, 0, 0],
+           [0, 0, 0, ..., 0, 0, 0],
+           [0, 0, 0, ..., 0, 0, 0],
+           ...,
+           [0, 0, 0, ..., 0, 0, 0],
+           [0, 0, 0, ..., 0, 0, 0],
+           [0, 0, 0, ..., 0, 0, 0]], dtype=int32)
+
+    ``sink`` is a mask of sink cells. The value ``1`` represents a sink cell and ``0`` a non-sink cell. The
+    given flow direction file in the example does not contain any sink cell. ``sink`` is therefore a matrix
+    of zeros.
+
+    >>> np.all(sink == 0)
+    np.True_
+
+    In this example, we are going to add a false sink (2 cells) to show how they can be identified.
+
+    >>> sink[10, 10:12] = 1
+    >>> np.all(sink == 0), np.count_nonzero(sink == 1)
+    (np.False_, 2)
+
+    We can retrieve the indices of the sink cells.
+
+    >>> idx = np.argwhere(sink == 1)
+    array([[10, 10],
+           [10, 11]])
+
+    The flow direction file can be modified to remove sink cells.
+
+    >>> with rasterio.open(flwdir) as ds_in:
+    ...     flwdir_data = ds_in.read(1)
+    ...     flwdir_data[sink == 1] = 0
+    ...     with rasterio.open("flwdir_wo_sink.tif", "w", **ds_in.profile) as ds_out:
+    ...         ds_out.write(flwdir_data, 1)
+
+    .. note::
+        Setting ``0`` to sink cells in the flow direction file is a way to remove them. However, it might not
+        be the best way to handle sink cells.
+
+    Finally, we can write the sink cells to a raster file by providing the output path.
+
+    >>> detect_sink(flwdir, "./flwdir_sink.tif")
+
+    The sink cells are written to the file ``flwdir_sink.tif`` and can be post-processed with a GIS software.
+    """
+
+    args = _standardize_detect_sink_args(flwdir_path, output_path)
+
+    return _detect_sink(*args)
+
+
+def _detect_sink(flwdir_dataset: rasterio.DatasetReader, output_path: str | None) -> np.ndarray:
+    flwdir = _get_array(flwdir_dataset)
+
+    sink = mw_mesh.detect_sink(flwdir)
+
+    if output_path is not None:
+        profile = flwdir_dataset.profile
+        profile.update(dtype=np.uint8, count=1, nodata=np.iinfo(np.uint8).max)
+
+        with rasterio.open(output_path, "w", **profile) as dst:
+            dst.write(sink, 1)
+
+    return sink
 
 
 def generate_mesh(
@@ -195,6 +310,7 @@ def generate_mesh(
     See Also
     --------
     smash.Model : Primary data structure of the hydrological model `smash`.
+    smash.factory.detect_sink : Detect the sink cells in a flow direction file.
 
     Examples
     --------
@@ -278,6 +394,7 @@ def _generate_mesh_from_xy(
     row_dln = np.zeros(shape=x.shape, dtype=np.int32)
     col_dln = np.zeros(shape=x.shape, dtype=np.int32)
     area_dln = np.zeros(shape=x.shape, dtype=np.float32)
+    sink_dln = np.zeros(shape=x.shape, dtype=np.bool)
     mask_dln = np.zeros(shape=flwdir.shape, dtype=np.int32)
 
     for ind in range(x.size):
@@ -298,7 +415,7 @@ def _generate_mesh_from_xy(
         dy_win = dy[slice_win]
         flwdir_win = flwdir[slice_win]
 
-        mask_dln_win, row_dln_win, col_dln_win = mw_mesh.catchment_dln(
+        mask_dln_win, row_dln_win, col_dln_win, sink_dln[ind] = mw_mesh.catchment_dln(
             flwdir_win, dx_win, dy_win, row_win, col_win, area[ind], max_depth
         )
 
@@ -308,6 +425,16 @@ def _generate_mesh_from_xy(
         area_dln[ind] = np.sum(mask_dln_win * dx_win * dy_win)
 
         mask_dln[slice_win] = np.where(mask_dln_win == 1, 1, mask_dln[slice_win])
+
+    if np.any(sink_dln):
+        warnings.warn(
+            f"One or more sinks were detected when trying to delineate the catchment(s): "
+            f"'{code[sink_dln == 1]}'. The catchment(s) might not be correctly delineated avoiding the sink "
+            f"cells. See also the 'smash.factory.detect_sink' function "
+            f"(https://smash.recover.inrae.fr/api_reference/sub-packages/smash/"
+            f"smash.factory.detect_sink.html) to identify and correct sinks beforehand",
+            stacklevel=2,
+        )
 
     flwdir = np.ma.masked_array(flwdir, mask=(1 - mask_dln))
     flwdir, slice_win = _trim_mask_2d(flwdir, slice_win=True)
@@ -376,6 +503,18 @@ def _generate_mesh_from_bbox(flwdir_dataset: rasterio.DatasetReader, bbox: np.nd
 
     # % Can close dataset
     flwdir_dataset.close()
+
+    sink = mw_mesh.detect_sink(flwdir)
+    # Check if sinks are detected on active cells and remove them
+    if np.any(sink[flwdir > 0]):
+        flwdir[sink == 1] = 0
+        warnings.warn(
+            "One or more sinks were detected in the given bounding box. The sink cells will be considered as "
+            "non-active cells. See also the 'smash.factory.detect_sink' function "
+            "(https://smash.recover.inrae.fr/api_reference/sub-packages/smash/"
+            "smash.factory.detect_sink.html) to identify and correct sinks beforehand",
+            stacklevel=2,
+        )
 
     flwdir = np.ma.masked_array(flwdir, mask=(flwdir < 1))
 
