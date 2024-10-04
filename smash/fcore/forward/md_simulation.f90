@@ -114,8 +114,9 @@ contains
         type(ReturnsDT), intent(inout) :: returns
         type(Checkpoint_VariableDT), intent(inout) :: checkpoint_variable
         integer, intent(in) :: start_time_step, end_time_step
+        real(sp), dimension(:, :, :), allocatable :: hsw_t, eta_t, qx_t, qy_t
 
-        integer :: t, rr_parameters_inc, rr_states_inc
+        integer :: t, rr_parameters_inc, rr_states_inc, i
         ! % Might add any number if needed
         real(sp), dimension(mesh%nac) :: h1, h2, h3, h4
 
@@ -380,7 +381,22 @@ contains
                     checkpoint_variable%ac_qz)
 
                 rr_parameters_inc = rr_parameters_inc + 1
+            
+            case ("sw2d")
 
+                call shallow_water_2d_time_step( &
+                    setup, &
+                    mesh, &
+                    input_data, &
+                    options, &
+                    returns, &
+                    t, &
+                    checkpoint_variable%ac_qtz, &
+                    checkpoint_variable%ac_rr_parameters(:, rr_parameters_inc + 1), & ! % topography
+                    checkpoint_variable%ac_rr_parameters(:, rr_parameters_inc + 2), & ! % manning coef
+                    checkpoint_variable%ac_qz)
+                
+                rr_parameters_inc = rr_parameters_inc + 1
             end select
 
             call store_time_step(setup, mesh, output, returns, checkpoint_variable, t)

@@ -15,8 +15,10 @@ module md_routing_operator
     use md_constant !% only : sp
     use mwd_setup !% only: SetupDT
     use mwd_mesh !% only: MeshDT
+    use mwd_input_data !% only: Input_DataDT !% lie au prcp
     use mwd_options !% only: OptionsDT
     use mwd_returns !% only: ReturnsDT
+    use mwd_atmos_manipulation !% get_ac_atmos_data_time_step
 
     implicit none
 
@@ -448,5 +450,331 @@ contains
         end do
 
     end subroutine kw_time_step
+
+    subroutine apply_simple_canal(nrow, ncol, h, qx, qy, c)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        integer, intent(in) :: c
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        
+        ! 1
+        if (c .lt. 10) then
+            h(:, 1) = 2._sp
+        else
+            h(:, 1) = 1._sp
+        end if
+        ! 2
+        qy(1, :) = 0._sp
+
+        ! 3
+        qx(:, ncol+1) = 0._sp
+
+        ! 4
+        qy(nrow+1, :) = 0._sp
+
+    end subroutine apply_simple_canal
+
+
+    subroutine apply_mac_donald(nrow, ncol, h, qx, qy, c)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        integer, intent(in) :: c
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        
+        ! 1
+        qx(:, 1) = 2._sp
+
+        ! 2
+        qy(1, :) = 0._sp
+
+        ! 3
+        h(:, ncol) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
+
+        ! 4
+        qy(nrow+1, :) = 0._sp
+
+    end subroutine apply_mac_donald
+    
+    subroutine initial_bump(nrow, ncol, h, qx, qy, zb)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
+        
+        h = 2._sp
+        qx = 4.42_sp
+        qy = 0._sp
+    end subroutine initial_bump
+    
+    subroutine apply_bump_bc(nrow, ncol, h, qx, qy, c)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        integer, intent(in) :: c
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        
+        ! 1
+        qx(:, 1) = 4.42_sp
+
+        ! 2
+        qy(1, :) = 0._sp
+
+        ! 3
+        h(:, ncol) = 2._sp
+
+        ! 4
+        qy(nrow+1, :) = 0._sp
+
+    end subroutine apply_bump_bc
+
+    subroutine initial_lake_at_rest(nrow, ncol, h, qx, qy, zb)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
+        
+        h = 2._sp - zb
+        qx = 0._sp
+        qy = 0._sp
+    end subroutine initial_lake_at_rest
+
+    subroutine bc_wall(nrow, ncol, h, qx, qy, c)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        integer, intent(in) :: c
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        
+        ! 1
+        qx(:, 1) = 0._sp
+
+        ! 2
+        qy(1, :) = 0._sp
+
+        ! 3
+        qx(:, ncol+1) = 0._sp
+
+        ! 4
+        qy(nrow+1, :) = 0._sp
+
+    end subroutine bc_wall
+
+    ! subroutine free_outflow(h, qx, qy, nrow, ncol)
+        ! implicit none
+        ! real(sp), dimension(nrow, ncol) :: h
+        ! real(sp), dimension(nrow, ncol+1) :: qx
+        ! real(sp), dimension(nrow+1, ncol) :: qy
+        ! do col = 1, mesh%ncol
+                
+        !     ! up
+        !     ! dzb = zb(1, col) - zb(2, col)
+        !     ! qy(1, col) = hsw(1, col) ** (5._sp / 3._sp) * &
+        !     !     sqrt(abs(dzb) / mesh%dy(1, col)) / manning(1, col)
+        !     qy(1, col) = 0._sp ! wall
+
+        !     ! down
+        !     ! dzb = zb(mesh%nrow-1, col) - zb(mesh%nrow, col)
+        !     ! qy(mesh%nrow+1, col) = hsw(mesh%nrow, col) ** (5._sp / 3._sp) * &
+        !     !     sqrt(abs(dzb) / mesh%dy(mesh%nrow, col)) / manning(mesh%nrow, col)
+        !     qy(mesh%nrow-1, col) = 0._sp ! wall
+
+        ! end do
+
+        ! do row = 1, mesh%nrow
+                            
+        !     ! ! left
+        !     ! dzb = zb(row, 1) - zb(row, 2)
+        !     ! qx(row, 1) = hsw(row, 1) ** (5._sp / 3._sp) * &
+        !     !     sqrt(abs(dzb)) / mesh%dx(row, 1) / manning(row, 1)
+        !     qx(row, 1) = 2._sp ! qin 
+        !     qy(row, 1) = 0._sp ! qin
+
+            ! right
+            ! dzb = zb(row, mesh%ncol-1) - zb(row, mesh%ncol)
+            ! qx(row, mesh%ncol+1) = hsw(row, mesh%ncol) ** (5._sp / 3._sp) * &
+            !     sqrt(abs(dzb)) / mesh%dx(row, mesh%ncol) / manning(row, mesh%ncol)
+            ! qx(row, mesh%ncol+1) = 0._sp ! wall
+        ! end do
+    ! do row=1, mesh%nrow
+    !     hsw(row, mesh%ncol) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
+    ! end do
+    ! end subroutine free_outflow
+
+
+    subroutine shallow_water_2d_time_step(setup, mesh, input_data, options, returns, &
+            time_step, ac_qtz, zb, manning, ac_qz)
+        !hsw, qx, qy a mettre dans les flux internes
+        implicit none
+
+        type(SetupDT), intent(in) :: setup
+        type(MeshDT), intent(in) :: mesh
+        type(Input_DataDT), intent(in) :: input_data
+        type(OptionsDT), intent(in) :: options
+        type(ReturnsDT), intent(inout) :: returns
+        integer, intent(in) :: time_step
+        real(sp), dimension(mesh%nac, setup%nqz), intent(in) :: ac_qtz
+        real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: zb, manning
+        real(sp), dimension(mesh%nac, setup%nqz), intent(inout) :: ac_qz
+        ! real(sp), dimension(:, :, :), allocatable :: hsw_t, eta_t, qx_t, qy_t
+        real(sp), dimension(mesh%nrow, mesh%ncol) :: hsw, eta
+        real(sp), dimension(mesh%nrow, mesh%ncol+1) :: qx
+        real(sp), dimension(mesh%nrow+1, mesh%ncol) :: qy
+        real(sp), dimension(mesh%nac) :: ac_prcp
+
+        integer :: i, j, row, col, k, time_returns, nt_sw, nt_sw_old, ctt
+        real(sp) :: t, dt
+        real(sp) :: heps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb
+
+        !$AD start-exclude
+
+        ! initialisation
+        t = (time_step - 1) * setup%dt
+        
+        call initial_lake_at_rest(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+        
+        heps = 1e-6
+        ctt = 1
+
+        ! print *, manning
+        
+        do while (t .lt. time_step * setup%dt .and. ctt .le. 1000) 
+            eta = zb + hsw
+            ! print *, eta 
+
+            returns%sw2d(:, :, ctt, 1) = hsw(:, :)
+            returns%sw2d(:, :, ctt, 2) = eta(:, :)
+            returns%sw2d(:, :, ctt, 3) = qx(:, :)
+            returns%sw2d(:, :, ctt, 4) = qy(:, :)
+
+            maxhsw = max(heps, maxval(hsw))
+            print *, maxhsw
+            print *, mesh%dx(0,0), mesh%dy(0,0)
+            dt = 0.5 * min(minval(mesh%dx), minval(mesh%dy)) &
+            / sqrt(gravity * maxhsw)
+
+            ! update fluxes 
+            do row = 1, mesh%nrow
+                do col = 2, mesh%ncol
+
+                    hfx = max(heps, max(eta(row, col-1), eta(row, col)) - max(zb(row, col-1), zb(row, col)))
+                    qx(row, col) = (qx(row, col) - dt * gravity * hfx * &
+                        (eta(row, col) - eta(row, col-1)) / mesh%dx(row, col)) / &
+                        (1 + dt * gravity * manning(row, col) ** 2 * abs(qx(row, col)) &
+                        / hfx ** (7._sp / 3._sp))
+                end do
+            end do
+
+            do row = 2, mesh%nrow
+                do col = 1, mesh%ncol
+
+                    hfy = max(heps, max(eta(row-1, col), eta(row, col)) - max(zb(row-1, col), zb(row, col)))
+                    qy(row, col) = (qy(row, col) - dt * gravity * hfy * &
+                            (eta(row, col) - eta(row-1, col)) / mesh%dy(row, col)) / &
+                            (1 + dt * gravity * manning(row, col) ** 2 * abs(qy(row, col)) &
+                            / hfy ** (7._sp / 3._sp))
+
+                end do
+            end do
+
+
+            ! update water height
+            do row = 1, mesh%nrow
+                do col = 1, mesh%ncol
+                    k = mesh%rowcol_to_ind_ac(row, col)
+                            
+                    hsw(row, col) = hsw(row, col) + dt / mesh%dx(row, col) * (qx(row, col) - qx(row, col+1)) & 
+                    + dt / mesh%dy(row, col) * (qy(row, col) - qy(row+1, col)) 
+
+                    ! if (t .eq. ((time_step - 1) * setup%dt)) then
+                    !     hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
+                    !         / mesh%dx(row, col) / mesh%dy(row, col)
+                    ! end if
+                    
+                end do
+            end do
+
+            ! call apply_simple_canal(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
+            
+            ! call apply_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
+
+            ! call bc_wall(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
+            call apply_bump_bc(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
+            print *, dt
+            ! ! write(*,*) "qx_t = "
+            ! ! do i = 1, size(returns%qx_t, 1)
+            ! !     write(*,"(*(f8.4))") returns%qx_t(i, :, ctt)
+            ! ! end do 
+            ! write(*,*) "qx = "
+            ! do i = 1, size(qx, 1)
+            !     write(*,"(*(f8.4))") qx(i,:)
+            ! end do
+            ! ! write(*,*) "qy_t = "
+            ! ! do i = 1, size(returns%qy_t, 1)
+            ! !     write(*,"(*(f8.4))") returns%qy_t(i, :, ctt)
+            ! ! end do 
+            ! write(*,*) "qy = "
+            ! do i = 1, size(qy, 1)
+            !     write(*,"(*(f8.4))") qy(i,:)
+            ! end do 
+            ! ! write(*,*) "hsw_t = "
+            ! ! do i = 1, size(returns%hsw_t, 1)
+            ! !     write(*,"(*(f8.4))") returns%hsw_t(i, :, ctt)
+            ! ! end do 
+            ! ! if (ctt .lt. 38 .and. ctt .gt. 28) then
+            ! !     print *, ctt 
+            ! write(*,*) "hsw = "
+            ! do i = 1, size(hsw, 1)
+            !     write(*,"(*(f8.4))") hsw(i,:)
+            ! end do 
+            ! ! end if
+            ctt = ctt + 1
+            t = t + dt
+        end do 
+
+        !update volume discharge
+        do row = 1, mesh%nrow
+            do col = 1, mesh%ncol
+                k = mesh%rowcol_to_ind_ac(row, col)
+                ac_qz(k, setup%nqz) = hsw(row, col) * mesh%dx(row, col) &
+                    * mesh%dy(row, col) /setup%dt ! voir les unites
+            end do
+        end do
+        
+        !$AD end-exclude
+    end subroutine shallow_water_2d_time_step
 
 end module md_routing_operator

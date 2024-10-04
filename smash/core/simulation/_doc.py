@@ -635,6 +635,14 @@ RETURN_OPTIONS_BASE_DOC = {
         from the Model object using the `Model.get_serr_sigma` method.
         """,
     ),
+    "sw2d": (
+        """
+        `bool`, default False
+        """,
+        """
+        printing internal variable of the routing shallow water 2d
+        """,
+    ),
 }
 
 

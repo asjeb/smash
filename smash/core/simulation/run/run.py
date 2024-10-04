@@ -197,14 +197,17 @@ def _forward_run(
         fret[key] = value
 
     ret = {**fret, **pyret}
-
     if ret:
         if "internal_fluxes" in ret:
             ret["internal_fluxes"] = {
                 key: ret["internal_fluxes"][..., i]
                 for i, key in enumerate(STRUCTURE_RR_INTERNAL_FLUXES[model.setup.structure])
             }
-
+        if "sw2d" in ret:
+            ret["sw2d"] = {
+                key: ret["sw2d"][..., i]
+                for i, key in enumerate(["hsw", "eta", "qx", "qy"])
+            } 
         # % Add time_step to the object
         if any(k in SIMULATION_RETURN_OPTIONS_TIME_STEP_KEYS for k in ret.keys()):
             ret["time_step"] = return_options["time_step"].copy()

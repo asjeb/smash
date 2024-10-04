@@ -102,6 +102,9 @@ module mwd_returns
 
         real(sp), dimension(:, :, :, :), allocatable :: internal_fluxes
         logical :: internal_fluxes_flag = .false.
+        
+        integer :: nt_sw
+        real(sp), dimension(:, :, :, :), allocatable :: sw2d
 
     end type ReturnsDT
 
@@ -191,6 +194,10 @@ contains
             case ("internal_fluxes")
                 this%internal_fluxes_flag = .true.
                 allocate (this%internal_fluxes(mesh%nrow, mesh%ncol, this%nmts, setup%n_internal_fluxes))
+            
+            case ("sw2d")
+                this%nt_sw = 1000
+                allocate(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
             end select
 
         end do

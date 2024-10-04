@@ -44,7 +44,7 @@ SNOW_MODULE = ["zero", "ssn"]
 
 HYDROLOGICAL_MODULE = ["gr4", "gr5", "grd", "loieau", "vic3l"]
 
-ROUTING_MODULE = ["lag0", "lr", "kw"]
+ROUTING_MODULE = ["lag0", "lr", "kw", "sw2d"]
 
 MODULE = SNOW_MODULE + HYDROLOGICAL_MODULE + ROUTING_MODULE
 
@@ -76,7 +76,7 @@ HYDROLOGICAL_MODULE_RR_PARAMETERS = dict(
 
 # % Following ROUTING_MODULE order
 ROUTING_MODULE_RR_PARAMETERS = dict(
-    zip(ROUTING_MODULE, [[], ["llr"], ["akw", "bkw"]])  # % lag0  # % lr  # % kw
+    zip(ROUTING_MODULE, [[], ["llr"], ["akw", "bkw"], ["topography", "manning"]])  # % lag0  # % lr  # % kw  # %sw2d
 )
 
 # % Following MODULE order
@@ -113,7 +113,7 @@ HYDROLOGICAL_MODULE_RR_STATES = dict(
 
 # % Following ROUTING_MODULE order
 ROUTING_MODULE_RR_STATES = dict(
-    zip(ROUTING_MODULE, [[], ["hlr"], []])  # % lag0  # % lr  # % kw
+    zip(ROUTING_MODULE, [[], ["hlr"], [], []])  # % lag0  # % lr  # % kw  # % sw2d
 )
 
 # % Following MODULE order
@@ -121,7 +121,7 @@ MODULE_RR_STATES = dict(**SNOW_MODULE_RR_STATES, **HYDROLOGICAL_MODULE_RR_STATES
 
 # % Following ROUTING_MODULE order
 ROUTING_MODULE_NQZ = dict(
-    zip(ROUTING_MODULE, [1, 1, 2])  # % lag0  # % lr  # % kw
+    zip(ROUTING_MODULE, [1, 1, 2, 2])  # % lag0  # % lr  # % kw  # % sw2d
 )
 
 
@@ -152,7 +152,7 @@ HYDROLOGICAL_MODULE_RR_INTERNAL_FLUXES = dict(
 
 # % Following ROUTING_MODULE order
 ROUTING_MODULE_RR_INTERNAL_FLUXES = dict(
-    zip(ROUTING_MODULE, [["qup"], ["qup"], ["qim1j"]])  # % lag0  # % lr  # % kw
+    zip(ROUTING_MODULE, [["qup"], ["qup"], ["qim1j"], []])  # % lag0  # % lr  # % kw
 )
 
 MODULE_RR_INTERNAL_FLUXES = dict(
@@ -224,7 +224,13 @@ RR_PARAMETERS = [
     "llr",  # % lr
     "akw",  # % kw
     "bkw",  # % kw
+    "topography", # % sw2d
+    "manning", # % sw2d
 ]
+
+# "hsw", # % sw2d
+# "qx", # % sw2d
+# "qy", # % sw2d
 
 RR_STATES = [
     "hs",  # % ssn
@@ -269,6 +275,8 @@ FEASIBLE_RR_PARAMETERS = dict(
             (0, np.inf),  # % llr
             (0, np.inf),  # % akw
             (0, np.inf),  # % bkw
+            (0, np.inf),  # % topography
+            (0, np.inf),  # % manning
         ],
     )
 )
@@ -324,6 +332,8 @@ DEFAULT_RR_PARAMETERS = dict(
             5,  # % llr
             5,  # % akw
             0.6,  # % bkw
+            0.,  # % topography
+            1.,  # % manning
         ],
     )
 )
@@ -377,6 +387,8 @@ DEFAULT_BOUNDS_RR_PARAMETERS = dict(
             (1e-6, 1e3),  # % llr
             (1e-3, 50),  # % akw
             (1e-3, 1),  # % bkw
+            (1e-3, 8850),  # % topography
+            (1e-3, 100),  # % manning
         ],
     )
 )
@@ -882,6 +894,7 @@ DEFAULT_SIMULATION_RETURN_OPTIONS = {
         "rr_states": False,
         "q_domain": False,
         "internal_fluxes": False,
+        "sw2d": True,
         "cost": False,
         "jobs": False,
     },
