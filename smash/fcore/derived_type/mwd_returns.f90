@@ -154,7 +154,7 @@ contains
                 allocate (this%internal_fluxes(mesh%nrow, mesh%ncol, this%nmts, setup%n_internal_fluxes))
             
             case ("sw2d")
-                this%nt_sw = 1000
+                this%nt_sw = 2000
                 allocate(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
             end select
 

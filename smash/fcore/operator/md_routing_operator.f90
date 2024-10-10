@@ -482,13 +482,27 @@ contains
 
     end subroutine apply_simple_canal
 
-
-    subroutine apply_mac_donald(nrow, ncol, h, qx, qy, c)
+    subroutine initial_macdonal(nrow, ncol, h, qx, qy, zb)
         implicit none
         integer, intent(in) :: nrow, ncol
         real(sp), dimension(nrow, ncol), intent(inout) :: h
         real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
         real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
+        
+        h = 0._sp
+
+        qx = 0._sp
+        qy = 0._sp
+    end subroutine initial_macdonal
+
+    subroutine bc_mac_donald(nrow, ncol, h, qx, qy, zb, c)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
         integer, intent(in) :: c
 
         !                            2
@@ -498,6 +512,7 @@ contains
         !                            4
         
         ! 1
+        ! h(:, 1) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
         qx(:, 1) = 2._sp
 
         ! 2
@@ -509,7 +524,7 @@ contains
         ! 4
         qy(nrow+1, :) = 0._sp
 
-    end subroutine apply_mac_donald
+    end subroutine bc_mac_donald
     
     subroutine initial_bump(nrow, ncol, h, qx, qy, zb)
         implicit none
@@ -519,17 +534,19 @@ contains
         real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
         real(sp), dimension(nrow, ncol), intent(in) :: zb
         
-        h = 2._sp
+        h = 2._sp - zb
+
         qx = 4.42_sp
         qy = 0._sp
     end subroutine initial_bump
     
-    subroutine apply_bump_bc(nrow, ncol, h, qx, qy, c)
+    subroutine apply_bump_bc(nrow, ncol, h, qx, qy, zb, c)
         implicit none
         integer, intent(in) :: nrow, ncol
         real(sp), dimension(nrow, ncol), intent(inout) :: h
         real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
         real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
         integer, intent(in) :: c
 
         !                            2
@@ -552,7 +569,9 @@ contains
 
     end subroutine apply_bump_bc
 
-    subroutine initial_lake_at_rest(nrow, ncol, h, qx, qy, zb)
+
+
+    subroutine initial_lake_at_rest_immersive_bump(nrow, ncol, h, qx, qy, zb)
         implicit none
         integer, intent(in) :: nrow, ncol
         real(sp), dimension(nrow, ncol), intent(inout) :: h
@@ -563,7 +582,21 @@ contains
         h = 2._sp - zb
         qx = 0._sp
         qy = 0._sp
-    end subroutine initial_lake_at_rest
+    end subroutine initial_lake_at_rest_immersive_bump
+
+    subroutine initial_lake_at_rest_emersive_bump(nrow, ncol, h, qx, qy, zb)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
+       
+        h(:, :) = max(0.1_sp, zb(:, :)) - zb(:, :)
+        qx = 0._sp
+        qy = 0._sp
+    end subroutine initial_lake_at_rest_emersive_bump
+
 
     subroutine bc_wall(nrow, ncol, h, qx, qy, c)
         implicit none
@@ -664,40 +697,52 @@ contains
         ! initialisation
         t = (time_step - 1) * setup%dt
         
-        call initial_lake_at_rest(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+        call initial_macdonal(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
         
-        heps = 1e-6
+        
+        heps = 1.e-6
         ctt = 1
 
         ! print *, manning
         
-        do while (t .lt. time_step * setup%dt .and. ctt .le. 1000) 
+        do while (t .lt. time_step * setup%dt .and. ctt .le. returns%nt_sw) 
             eta = zb + hsw
             ! print *, eta 
-
+            ! write(*,*) "qx = "
+            ! do i = 1, size(qx, 1)
+            !     write(*,"(*(f8.4))") qx(i,:)
+            ! end do
+            ! write(*,*) "h = "
+            ! do i = 1, size(hsw, 1)
+            !     write(*,"(*(f8.4))") hsw(i,:)
+            ! end do
             returns%sw2d(:, :, ctt, 1) = hsw(:, :)
             returns%sw2d(:, :, ctt, 2) = eta(:, :)
             returns%sw2d(:, :, ctt, 3) = qx(:, :)
             returns%sw2d(:, :, ctt, 4) = qy(:, :)
 
             maxhsw = max(heps, maxval(hsw))
-            print *, maxhsw
-            print *, mesh%dx(0,0), mesh%dy(0,0)
+            ! print *, maxhsw
+            ! print *, mesh%dx(0,0), mesh%dy(0,0)
             dt = 0.5 * min(minval(mesh%dx), minval(mesh%dy)) &
             / sqrt(gravity * maxhsw)
 
+            ! print *, eta(1, 1)
+            ! print *, hsw(1, 1)
+            ! print *, manning(1, 1)
             ! update fluxes 
             do row = 1, mesh%nrow
                 do col = 2, mesh%ncol
 
                     hfx = max(heps, max(eta(row, col-1), eta(row, col)) - max(zb(row, col-1), zb(row, col)))
+                    ! print *, row, col, eta(row, col), eta(row, col-1), eta(row, col) - eta(row, col-1)
                     qx(row, col) = (qx(row, col) - dt * gravity * hfx * &
                         (eta(row, col) - eta(row, col-1)) / mesh%dx(row, col)) / &
                         (1 + dt * gravity * manning(row, col) ** 2 * abs(qx(row, col)) &
                         / hfx ** (7._sp / 3._sp))
                 end do
             end do
-
+            ! print *, "POUET"
             do row = 2, mesh%nrow
                 do col = 1, mesh%ncol
 
@@ -710,7 +755,7 @@ contains
                 end do
             end do
 
-
+            
             ! update water height
             do row = 1, mesh%nrow
                 do col = 1, mesh%ncol
@@ -719,6 +764,7 @@ contains
                     hsw(row, col) = hsw(row, col) + dt / mesh%dx(row, col) * (qx(row, col) - qx(row, col+1)) & 
                     + dt / mesh%dy(row, col) * (qy(row, col) - qy(row+1, col)) 
 
+                    ! hsw(row, col) = max(0._sp, hsw(row, col))
                     ! if (t .eq. ((time_step - 1) * setup%dt)) then
                     !     hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
                     !         / mesh%dx(row, col) / mesh%dy(row, col)
@@ -727,21 +773,19 @@ contains
                 end do
             end do
 
+            call bc_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, ctt)
+
             ! call apply_simple_canal(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
             
             ! call apply_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
 
             ! call bc_wall(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
-            call apply_bump_bc(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
-            print *, dt
+            ! print *, dt
             ! ! write(*,*) "qx_t = "
             ! ! do i = 1, size(returns%qx_t, 1)
             ! !     write(*,"(*(f8.4))") returns%qx_t(i, :, ctt)
             ! ! end do 
-            ! write(*,*) "qx = "
-            ! do i = 1, size(qx, 1)
-            !     write(*,"(*(f8.4))") qx(i,:)
-            ! end do
+            
             ! ! write(*,*) "qy_t = "
             ! ! do i = 1, size(returns%qy_t, 1)
             ! !     write(*,"(*(f8.4))") returns%qy_t(i, :, ctt)

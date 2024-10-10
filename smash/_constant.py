@@ -425,7 +425,7 @@ DEFAULT_RR_PARAMETERS = dict(
             5,  # % akw
             0.6,  # % bkw
             0.,  # % topography
-            1.,  # % manning
+            0.,  # % manning
         ],
     )
 )

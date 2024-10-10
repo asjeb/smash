@@ -2706,6 +2706,8 @@ MODULE MWD_RETURNS_DIFF
       LOGICAL :: log_h_flag=.false.
       REAL(sp), DIMENSION(:, :, :, :), ALLOCATABLE :: internal_fluxes
       LOGICAL :: internal_fluxes_flag=.false.
+      INTEGER :: nt_sw
+      REAL(sp), DIMENSION(:, :, :, :), ALLOCATABLE :: sw2d
   END TYPE RETURNSDT
 
 CONTAINS
@@ -2733,6 +2735,7 @@ CONTAINS
 ! Variable inside forward run are pre allocated
 ! Variable inside optimize will be allocated on the fly
     DO i=1,SIZE(wkeys)
+!hsw_t, eta_t, qx_t, qy_t
       SELECT CASE  (wkeys(i)) 
       CASE ('rr_states') 
         this%rr_states_flag = .true.
@@ -2760,6 +2763,9 @@ CONTAINS
         this%internal_fluxes_flag = .true.
         ALLOCATE(this%internal_fluxes(mesh%nrow, mesh%ncol, this%nmts, &
 &       setup%n_internal_fluxes))
+      CASE ('sw2d') 
+        this%nt_sw = 1000
+        ALLOCATE(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4))
       END SELECT
     END DO
   END SUBROUTINE RETURNSDT_INITIALISE
@@ -21273,10 +21279,14 @@ MODULE MD_ROUTING_OPERATOR_DIFF
   USE MWD_SETUP
 !% only: MeshDT
   USE MWD_MESH
+!% only: Input_DataDT !% lie au prcp
+  USE MWD_INPUT_DATA
 !% only: OptionsDT
   USE MWD_OPTIONS_DIFF
 !% only: ReturnsDT
   USE MWD_RETURNS_DIFF
+!% get_ac_atmos_data_time_step
+  USE MWD_ATMOS_MANIPULATION_DIFF
   IMPLICIT NONE
 
 CONTAINS
@@ -22453,6 +22463,219 @@ CONTAINS
       END IF
     END DO
   END SUBROUTINE KW_TIME_STEP
+
+  SUBROUTINE APPLY_SIMPLE_CANAL(nrow, ncol, h, qx, qy, c)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    INTEGER, INTENT(IN) :: c
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+! 1
+    IF (c .LT. 10) THEN
+      h(:, 1) = 2._sp
+    ELSE
+      h(:, 1) = 1._sp
+    END IF
+! 2
+    qy(1, :) = 0._sp
+! 3
+    qx(:, ncol+1) = 0._sp
+! 4
+    qy(nrow+1, :) = 0._sp
+  END SUBROUTINE APPLY_SIMPLE_CANAL
+
+  SUBROUTINE INITIAL_MACDONAL(nrow, ncol, h, qx, qy, zb)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    h = 0._sp
+    qx = 0._sp
+    qy = 0._sp
+  END SUBROUTINE INITIAL_MACDONAL
+
+  SUBROUTINE BC_MAC_DONALD(nrow, ncol, h, qx, qy, zb, c)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    INTEGER, INTENT(IN) :: c
+    INTRINSIC EXP
+    REAL(sp) :: pwx1
+    REAL(sp) :: pwr1
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+! 1
+! h(:, 1) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
+    qx(:, 1) = 2._sp
+! 2
+    qy(1, :) = 0._sp
+! 3
+    pwx1 = 4._sp/gravity
+    pwr1 = pwx1**(1._sp/3._sp)
+    h(:, ncol) = pwr1*(1+0.5*EXP(-4._sp))
+! 4
+    qy(nrow+1, :) = 0._sp
+  END SUBROUTINE BC_MAC_DONALD
+
+  SUBROUTINE INITIAL_BUMP(nrow, ncol, h, qx, qy, zb)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    h = 2._sp - zb
+    qx = 4.42_sp
+    qy = 0._sp
+  END SUBROUTINE INITIAL_BUMP
+
+  SUBROUTINE APPLY_BUMP_BC(nrow, ncol, h, qx, qy, zb, c)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    INTEGER, INTENT(IN) :: c
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+! 1
+    qx(:, 1) = 4.42_sp
+! 2
+    qy(1, :) = 0._sp
+! 3
+    h(:, ncol) = 2._sp
+! 4
+    qy(nrow+1, :) = 0._sp
+  END SUBROUTINE APPLY_BUMP_BC
+
+  SUBROUTINE INITIAL_LAKE_AT_REST_IMMERSIVE_BUMP(nrow, ncol, h, qx, qy, &
+&   zb)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    h = 2._sp - zb
+    qx = 0._sp
+    qy = 0._sp
+  END SUBROUTINE INITIAL_LAKE_AT_REST_IMMERSIVE_BUMP
+
+  SUBROUTINE INITIAL_LAKE_AT_REST_EMERSIVE_BUMP(nrow, ncol, h, qx, qy, &
+&   zb)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    INTRINSIC MAX
+    REAL(sp), DIMENSION(nrow, ncol) :: max1
+    WHERE (0.1_sp .LT. zb(:, :)) 
+      max1 = zb(:, :)
+    ELSEWHERE
+      max1 = 0.1_sp
+    END WHERE
+    h(:, :) = max1 - zb(:, :)
+    qx = 0._sp
+    qy = 0._sp
+  END SUBROUTINE INITIAL_LAKE_AT_REST_EMERSIVE_BUMP
+
+  SUBROUTINE BC_WALL(nrow, ncol, h, qx, qy, c)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    INTEGER, INTENT(IN) :: c
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+! 1
+    qx(:, 1) = 0._sp
+! 2
+    qy(1, :) = 0._sp
+! 3
+    qx(:, ncol+1) = 0._sp
+! 4
+    qy(nrow+1, :) = 0._sp
+  END SUBROUTINE BC_WALL
+
+! subroutine free_outflow(h, qx, qy, nrow, ncol)
+! implicit none
+! real(sp), dimension(nrow, ncol) :: h
+! real(sp), dimension(nrow, ncol+1) :: qx
+! real(sp), dimension(nrow+1, ncol) :: qy
+! do col = 1, mesh%ncol
+!     ! up
+!     ! dzb = zb(1, col) - zb(2, col)
+!     ! qy(1, col) = hsw(1, col) ** (5._sp / 3._sp) * &
+!     !     sqrt(abs(dzb) / mesh%dy(1, col)) / manning(1, col)
+!     qy(1, col) = 0._sp ! wall
+!     ! down
+!     ! dzb = zb(mesh%nrow-1, col) - zb(mesh%nrow, col)
+!     ! qy(mesh%nrow+1, col) = hsw(mesh%nrow, col) ** (5._sp / 3._sp) * &
+!     !     sqrt(abs(dzb) / mesh%dy(mesh%nrow, col)) / manning(mesh%nrow, col)
+!     qy(mesh%nrow-1, col) = 0._sp ! wall
+! end do
+! do row = 1, mesh%nrow
+!     ! ! left
+!     ! dzb = zb(row, 1) - zb(row, 2)
+!     ! qx(row, 1) = hsw(row, 1) ** (5._sp / 3._sp) * &
+!     !     sqrt(abs(dzb)) / mesh%dx(row, 1) / manning(row, 1)
+!     qx(row, 1) = 2._sp ! qin 
+!     qy(row, 1) = 0._sp ! qin
+! right
+! dzb = zb(row, mesh%ncol-1) - zb(row, mesh%ncol)
+! qx(row, mesh%ncol+1) = hsw(row, mesh%ncol) ** (5._sp / 3._sp) * &
+!     sqrt(abs(dzb)) / mesh%dx(row, mesh%ncol) / manning(row, mesh%ncol)
+! qx(row, mesh%ncol+1) = 0._sp ! wall
+! end do
+! do row=1, mesh%nrow
+!     hsw(row, mesh%ncol) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
+! end do
+! end subroutine free_outflow
+  SUBROUTINE SHALLOW_WATER_2D_TIME_STEP(setup, mesh, input_data, options&
+&   , returns, time_step, ac_qtz, zb, manning, ac_qz)
+    IMPLICIT NONE
+    TYPE(SETUPDT), INTENT(IN) :: setup
+    TYPE(MESHDT), INTENT(IN) :: mesh
+    TYPE(INPUT_DATADT), INTENT(IN) :: input_data
+    TYPE(OPTIONSDT), INTENT(IN) :: options
+    TYPE(RETURNSDT), INTENT(INOUT) :: returns
+    INTEGER, INTENT(IN) :: time_step
+    REAL(sp), DIMENSION(mesh%nac, setup%nqz), INTENT(IN) :: ac_qtz
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol), INTENT(IN) :: zb, manning
+    REAL(sp), DIMENSION(mesh%nac, setup%nqz), INTENT(INOUT) :: ac_qz
+! real(sp), dimension(:, :, :), allocatable :: hsw_t, eta_t, qx_t, qy_t
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol) :: hsw, eta
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol+1) :: qx
+    REAL(sp), DIMENSION(mesh%nrow+1, mesh%ncol) :: qy
+    REAL(sp), DIMENSION(mesh%nac) :: ac_prcp
+    INTEGER :: i, j, row, col, k, time_returns, nt_sw, nt_sw_old, ctt
+    REAL(sp) :: t, dt
+    REAL(sp) :: heps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb
+  END SUBROUTINE SHALLOW_WATER_2D_TIME_STEP
 
 END MODULE MD_ROUTING_OPERATOR_DIFF
 
@@ -24357,7 +24580,9 @@ CONTAINS
     TYPE(CHECKPOINT_VARIABLEDT), INTENT(INOUT) :: checkpoint_variable
     TYPE(CHECKPOINT_VARIABLEDT), INTENT(INOUT) :: checkpoint_variable_d
     INTEGER, INTENT(IN) :: start_time_step, end_time_step
-    INTEGER :: t, rr_parameters_inc, rr_states_inc
+    REAL(sp), DIMENSION(:, :, :), ALLOCATABLE :: hsw_t, eta_t, qx_t, &
+&   qy_t
+    INTEGER :: t, rr_parameters_inc, rr_states_inc, i
 ! % Might add any number if needed
     REAL(sp), DIMENSION(mesh%nac) :: h1, h2, h3, h4
     REAL(sp), DIMENSION(mesh%nac) :: h1_d, h2_d, h3_d, h4_d
@@ -25341,6 +25566,16 @@ CONTAINS
 &                     ac_rr_parameters(:, rr_parameters_inc+2), &
 &                     checkpoint_variable%ac_qz, checkpoint_variable_d%&
 &                     ac_qz)
+      CASE ('sw2d') 
+! % topography
+! % manning coef
+        CALL SHALLOW_WATER_2D_TIME_STEP(setup, mesh, input_data, options&
+&                                 , returns, t, checkpoint_variable%&
+&                                 ac_qtz, checkpoint_variable%&
+&                                 ac_rr_parameters(:, rr_parameters_inc+&
+&                                 1), checkpoint_variable%&
+&                                 ac_rr_parameters(:, rr_parameters_inc+&
+&                                 2), checkpoint_variable%ac_qz)
       END SELECT
       CALL STORE_TIME_STEP_D(setup, mesh, output, output_d, returns, &
 &                      checkpoint_variable, checkpoint_variable_d, t)
@@ -25386,7 +25621,9 @@ CONTAINS
     TYPE(CHECKPOINT_VARIABLEDT), INTENT(INOUT) :: checkpoint_variable
     TYPE(CHECKPOINT_VARIABLEDT), INTENT(INOUT) :: checkpoint_variable_b
     INTEGER, INTENT(IN) :: start_time_step, end_time_step
-    INTEGER :: t, rr_parameters_inc, rr_states_inc
+    REAL(sp), DIMENSION(:, :, :), ALLOCATABLE :: hsw_t, eta_t, qx_t, &
+&   qy_t
+    INTEGER :: t, rr_parameters_inc, rr_states_inc, i
 ! % Might add any number if needed
     REAL(sp), DIMENSION(mesh%nac) :: h1, h2, h3, h4
     REAL(sp), DIMENSION(mesh%nac) :: h1_b, h2_b, h3_b, h4_b
@@ -26170,7 +26407,7 @@ CONTAINS
         CALL LAG0_TIME_STEP(setup, mesh, options, returns, t, &
 &                     checkpoint_variable%ac_qtz, checkpoint_variable%&
 &                     ac_qz)
-        CALL PUSHCONTROL2B(1)
+        CALL PUSHCONTROL2B(0)
       CASE ('lr') 
 ! 'lr' module
 ! % To avoid potential aliasing tapenade warning (DF02)
@@ -26187,7 +26424,7 @@ CONTAINS
 &                   ac_rr_parameters(:, rr_parameters_inc+1), h1, &
 &                   checkpoint_variable%ac_qz)
         checkpoint_variable%ac_rr_states(:, rr_states_inc+1) = h1
-        CALL PUSHCONTROL2B(2)
+        CALL PUSHCONTROL2B(1)
       CASE ('kw') 
 ! 'kw' module
 ! % akw
@@ -26200,9 +26437,11 @@ CONTAINS
 &                   ac_rr_parameters(:, rr_parameters_inc+1), &
 &                   checkpoint_variable%ac_rr_parameters(:, &
 &                   rr_parameters_inc+2), checkpoint_variable%ac_qz)
+        CALL PUSHCONTROL2B(2)
+      CASE ('sw2d') 
         CALL PUSHCONTROL2B(3)
       CASE DEFAULT
-        CALL PUSHCONTROL2B(0)
+        CALL PUSHCONTROL2B(3)
       END SELECT
       CALL STORE_TIME_STEP(setup, mesh, output, returns, &
 &                    checkpoint_variable, t)
@@ -26212,7 +26451,7 @@ CONTAINS
 &                      checkpoint_variable, checkpoint_variable_b, t)
       CALL POPCONTROL2B(branch)
       IF (branch .LT. 2) THEN
-        IF (branch .NE. 0) THEN
+        IF (branch .EQ. 0) THEN
           CALL POPREAL4ARRAY(checkpoint_variable%ac_qz, SIZE(&
 &                      checkpoint_variable%ac_qz, 1)*SIZE(&
 &                      checkpoint_variable%ac_qz, 2))
@@ -26221,23 +26460,24 @@ CONTAINS
 &                         checkpoint_variable_b%ac_qtz, &
 &                         checkpoint_variable%ac_qz, &
 &                         checkpoint_variable_b%ac_qz)
+        ELSE
+          h1_b = 0.0_4
+          h1_b = checkpoint_variable_b%ac_rr_states(:, rr_states_inc+1)
+          CALL POPREAL4ARRAY(h1, mesh%nac)
+          CALL POPREAL4ARRAY(checkpoint_variable%ac_qz, SIZE(&
+&                      checkpoint_variable%ac_qz, 1)*SIZE(&
+&                      checkpoint_variable%ac_qz, 2))
+          CALL LR_TIME_STEP_B(setup, mesh, options, returns, t, &
+&                       checkpoint_variable%ac_qtz, &
+&                       checkpoint_variable_b%ac_qtz, &
+&                       checkpoint_variable%ac_rr_parameters(:, &
+&                       rr_parameters_inc+1), checkpoint_variable_b%&
+&                       ac_rr_parameters(:, rr_parameters_inc+1), h1, &
+&                       h1_b, checkpoint_variable%ac_qz, &
+&                       checkpoint_variable_b%ac_qz)
+          checkpoint_variable_b%ac_rr_states(:, rr_states_inc+1) = h1_b
         END IF
       ELSE IF (branch .EQ. 2) THEN
-        h1_b = 0.0_4
-        h1_b = checkpoint_variable_b%ac_rr_states(:, rr_states_inc+1)
-        CALL POPREAL4ARRAY(h1, mesh%nac)
-        CALL POPREAL4ARRAY(checkpoint_variable%ac_qz, SIZE(&
-&                    checkpoint_variable%ac_qz, 1)*SIZE(&
-&                    checkpoint_variable%ac_qz, 2))
-        CALL LR_TIME_STEP_B(setup, mesh, options, returns, t, &
-&                     checkpoint_variable%ac_qtz, checkpoint_variable_b%&
-&                     ac_qtz, checkpoint_variable%ac_rr_parameters(:, &
-&                     rr_parameters_inc+1), checkpoint_variable_b%&
-&                     ac_rr_parameters(:, rr_parameters_inc+1), h1, h1_b&
-&                     , checkpoint_variable%ac_qz, checkpoint_variable_b&
-&                     %ac_qz)
-        checkpoint_variable_b%ac_rr_states(:, rr_states_inc+1) = h1_b
-      ELSE
         CALL POPREAL4ARRAY(checkpoint_variable%ac_qz, SIZE(&
 &                    checkpoint_variable%ac_qz, 1)*SIZE(&
 &                    checkpoint_variable%ac_qz, 2))
@@ -27248,7 +27488,9 @@ CONTAINS
     TYPE(RETURNSDT), INTENT(INOUT) :: returns
     TYPE(CHECKPOINT_VARIABLEDT), INTENT(INOUT) :: checkpoint_variable
     INTEGER, INTENT(IN) :: start_time_step, end_time_step
-    INTEGER :: t, rr_parameters_inc, rr_states_inc
+    REAL(sp), DIMENSION(:, :, :), ALLOCATABLE :: hsw_t, eta_t, qx_t, &
+&   qy_t
+    INTEGER :: t, rr_parameters_inc, rr_states_inc, i
 ! % Might add any number if needed
     REAL(sp), DIMENSION(mesh%nac) :: h1, h2, h3, h4
     DO t=start_time_step,end_time_step
@@ -27898,6 +28140,17 @@ CONTAINS
 &                   ac_rr_parameters(:, rr_parameters_inc+1), &
 &                   checkpoint_variable%ac_rr_parameters(:, &
 &                   rr_parameters_inc+2), checkpoint_variable%ac_qz)
+        rr_parameters_inc = rr_parameters_inc + 1
+      CASE ('sw2d') 
+! % topography
+! % manning coef
+        CALL SHALLOW_WATER_2D_TIME_STEP(setup, mesh, input_data, options&
+&                                 , returns, t, checkpoint_variable%&
+&                                 ac_qtz, checkpoint_variable%&
+&                                 ac_rr_parameters(:, rr_parameters_inc+&
+&                                 1), checkpoint_variable%&
+&                                 ac_rr_parameters(:, rr_parameters_inc+&
+&                                 2), checkpoint_variable%ac_qz)
         rr_parameters_inc = rr_parameters_inc + 1
       END SELECT
       CALL STORE_TIME_STEP(setup, mesh, output, returns, &
