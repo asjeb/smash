@@ -80,6 +80,7 @@ module mwd_returns
         
         integer :: nt_sw
         real(sp), dimension(:, :, :, :), allocatable :: sw2d
+        real(sp), dimension(:), allocatable :: sw2d_times
 
     end type ReturnsDT
 
@@ -154,8 +155,12 @@ contains
                 allocate (this%internal_fluxes(mesh%nrow, mesh%ncol, this%nmts, setup%n_internal_fluxes))
             
             case ("sw2d")
-                this%nt_sw = 2000
+                this%nt_sw = 3000
                 allocate(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
+            
+            case ("sw2d_times")
+                allocate(this%sw2d_times(this%nt_sw))
+
             end select
 
         end do

@@ -742,6 +742,14 @@ RETURN_OPTIONS_BASE_DOC = {
         printing internal variable of the routing shallow water 2d
         """,
     ),
+    "sw2d_times": (
+        """
+        `bool`, default False
+        """,
+        """
+        printing time variable of the routing shallow water 2d
+        """,
+    ),
 }
 
 

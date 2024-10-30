@@ -1037,6 +1037,7 @@ DEFAULT_SIMULATION_RETURN_OPTIONS = {
         "q_domain": False,
         "internal_fluxes": False,
         "sw2d": True,
+        "sw2d_times": True,
         "cost": False,
         "jobs": False,
     },

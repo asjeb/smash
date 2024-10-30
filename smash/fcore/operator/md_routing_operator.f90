@@ -598,6 +598,160 @@ contains
     end subroutine initial_lake_at_rest_emersive_bump
 
 
+    subroutine initial_bump_drain(nrow, ncol, h, qx, qy, zb)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
+       
+        h = 0.5_sp - zb
+        qx = 0._sp
+        qy = 0._sp
+    end subroutine initial_bump_drain
+
+
+    subroutine initial_wet_dambreak(nrow, ncol, h, qx, qy, zb)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
+        real(sp) :: hl, hr
+        integer :: col
+
+        hl = 0.005_sp
+        hr = 0.001_sp
+        
+        h = hl
+        do col = ncol/2, ncol  
+            h(:, col) = hr
+        end do
+
+        qx = 0._sp
+        qy = 0._sp
+    end subroutine initial_wet_dambreak
+
+
+    subroutine initial_dry_dambreak(nrow, ncol, h, qx, qy, zb)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
+        real(sp) :: hl, hr
+        integer :: col
+
+        hl = 0.005_sp
+        hr = 0._sp
+        
+        h = hl
+        do col = ncol/2, ncol  
+            h(:, col) = hr
+        end do
+
+        qx = 0._sp
+        qy = 0._sp
+    end subroutine initial_dry_dambreak
+    
+
+    subroutine bc_bump_drain(nrow, ncol, h, qx, qy, c)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        integer, intent(in) :: c
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        
+        ! 1
+        qx(:, 1) = 0._sp
+
+        ! 2
+        qy(1, :) = 0._sp
+
+        ! 3
+        ! h(:, ncol) = 0._sp
+        qx(:, ncol+1) = 0.1
+
+        ! 4
+        qy(nrow+1, :) = 0._sp
+
+    end subroutine bc_bump_drain
+
+
+    subroutine bc_wet_dambreak(nrow, ncol, h, qx, qy)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp) :: hl, hr
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        
+        hl = 0.005_sp
+        hr = 0.001_sp
+
+        ! 1
+        h(:, 1) = hl
+
+        ! 2
+        qy(1, :) = 0._sp
+
+        ! 3
+        h(:, ncol) = hr
+
+        ! 4
+        qy(nrow+1, :) = 0._sp
+
+    end subroutine bc_wet_dambreak
+
+
+    subroutine bc_dry_dambreak(nrow, ncol, h, qx, qy)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp) :: hl, hr
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        
+        hl = 0.005_sp
+        hr = 0._sp
+
+        ! 1
+        h(:, 1) = hl
+
+        ! 2
+        qy(1, :) = 0._sp
+
+        ! 3
+        h(:, ncol) = hr
+
+        ! 4
+        qy(nrow+1, :) = 0._sp
+
+    end subroutine bc_dry_dambreak
+
+
     subroutine bc_wall(nrow, ncol, h, qx, qy, c)
         implicit none
         integer, intent(in) :: nrow, ncol
@@ -670,7 +824,6 @@ contains
 
     subroutine shallow_water_2d_time_step(setup, mesh, input_data, options, returns, &
             time_step, ac_qtz, zb, manning, ac_qz)
-        !hsw, qx, qy a mettre dans les flux internes
         implicit none
 
         type(SetupDT), intent(in) :: setup
@@ -690,59 +843,47 @@ contains
 
         integer :: i, j, row, col, k, time_returns, nt_sw, nt_sw_old, ctt
         real(sp) :: t, dt
-        real(sp) :: heps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb
+        real(sp) :: heps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb, h, hh, z
 
         !$AD start-exclude
 
         ! initialisation
         t = (time_step - 1) * setup%dt
         
-        call initial_macdonal(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
-        
-        
+        ! call initial_macdonal(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+        ! call initial_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+        ! call initial_wet_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+        call initial_dry_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+
         heps = 1.e-6
         ctt = 1
 
-        ! print *, manning
-        
         do while (t .lt. time_step * setup%dt .and. ctt .le. returns%nt_sw) 
+            ! print *, ctt, t, time_step * setup%dt, setup%dt, time_step
             eta = zb + hsw
-            ! print *, eta 
-            ! write(*,*) "qx = "
-            ! do i = 1, size(qx, 1)
-            !     write(*,"(*(f8.4))") qx(i,:)
-            ! end do
-            ! write(*,*) "h = "
-            ! do i = 1, size(hsw, 1)
-            !     write(*,"(*(f8.4))") hsw(i,:)
-            ! end do
+            
             returns%sw2d(:, :, ctt, 1) = hsw(:, :)
             returns%sw2d(:, :, ctt, 2) = eta(:, :)
             returns%sw2d(:, :, ctt, 3) = qx(:, :)
             returns%sw2d(:, :, ctt, 4) = qy(:, :)
+            returns%sw2d_times(ctt) = t
 
             maxhsw = max(heps, maxval(hsw))
-            ! print *, maxhsw
-            ! print *, mesh%dx(0,0), mesh%dy(0,0)
-            dt = 0.5 * min(minval(mesh%dx), minval(mesh%dy)) &
+           
+            dt = 0.7 * min(minval(mesh%dx), minval(mesh%dy)) &
             / sqrt(gravity * maxhsw)
 
-            ! print *, eta(1, 1)
-            ! print *, hsw(1, 1)
-            ! print *, manning(1, 1)
-            ! update fluxes 
             do row = 1, mesh%nrow
                 do col = 2, mesh%ncol
 
                     hfx = max(heps, max(eta(row, col-1), eta(row, col)) - max(zb(row, col-1), zb(row, col)))
-                    ! print *, row, col, eta(row, col), eta(row, col-1), eta(row, col) - eta(row, col-1)
                     qx(row, col) = (qx(row, col) - dt * gravity * hfx * &
                         (eta(row, col) - eta(row, col-1)) / mesh%dx(row, col)) / &
                         (1 + dt * gravity * manning(row, col) ** 2 * abs(qx(row, col)) &
                         / hfx ** (7._sp / 3._sp))
                 end do
             end do
-            ! print *, "POUET"
+
             do row = 2, mesh%nrow
                 do col = 1, mesh%ncol
 
@@ -754,7 +895,6 @@ contains
 
                 end do
             end do
-
             
             ! update water height
             do row = 1, mesh%nrow
@@ -773,43 +913,25 @@ contains
                 end do
             end do
 
-            call bc_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, ctt)
+            ! call apply_bump_bc(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, ctt)
 
             ! call apply_simple_canal(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
             
-            ! call apply_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
-
+            ! call bc_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, ctt)
+          
             ! call bc_wall(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
-            ! print *, dt
-            ! ! write(*,*) "qx_t = "
-            ! ! do i = 1, size(returns%qx_t, 1)
-            ! !     write(*,"(*(f8.4))") returns%qx_t(i, :, ctt)
-            ! ! end do 
-            
-            ! ! write(*,*) "qy_t = "
-            ! ! do i = 1, size(returns%qy_t, 1)
-            ! !     write(*,"(*(f8.4))") returns%qy_t(i, :, ctt)
-            ! ! end do 
-            ! write(*,*) "qy = "
-            ! do i = 1, size(qy, 1)
-            !     write(*,"(*(f8.4))") qy(i,:)
-            ! end do 
-            ! ! write(*,*) "hsw_t = "
-            ! ! do i = 1, size(returns%hsw_t, 1)
-            ! !     write(*,"(*(f8.4))") returns%hsw_t(i, :, ctt)
-            ! ! end do 
-            ! ! if (ctt .lt. 38 .and. ctt .gt. 28) then
-            ! !     print *, ctt 
-            ! write(*,*) "hsw = "
-            ! do i = 1, size(hsw, 1)
-            !     write(*,"(*(f8.4))") hsw(i,:)
-            ! end do 
-            ! ! end if
+
+            ! call bc_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
+
+            call bc_dry_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy)
+
             ctt = ctt + 1
             t = t + dt
-        end do 
+        end do
 
         !update volume discharge
+        ! avoir les fluxes aux interfaces h au centre
+        ! smash c'est un flux a l interieur
         do row = 1, mesh%nrow
             do col = 1, mesh%ncol
                 k = mesh%rowcol_to_ind_ac(row, col)

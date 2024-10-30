@@ -2708,6 +2708,7 @@ MODULE MWD_RETURNS_DIFF
       LOGICAL :: internal_fluxes_flag=.false.
       INTEGER :: nt_sw
       REAL(sp), DIMENSION(:, :, :, :), ALLOCATABLE :: sw2d
+      REAL(sp), DIMENSION(:), ALLOCATABLE :: sw2d_times
   END TYPE RETURNSDT
 
 CONTAINS
@@ -2735,7 +2736,6 @@ CONTAINS
 ! Variable inside forward run are pre allocated
 ! Variable inside optimize will be allocated on the fly
     DO i=1,SIZE(wkeys)
-!hsw_t, eta_t, qx_t, qy_t
       SELECT CASE  (wkeys(i)) 
       CASE ('rr_states') 
         this%rr_states_flag = .true.
@@ -2764,8 +2764,11 @@ CONTAINS
         ALLOCATE(this%internal_fluxes(mesh%nrow, mesh%ncol, this%nmts, &
 &       setup%n_internal_fluxes))
       CASE ('sw2d') 
-        this%nt_sw = 1000
+        this%nt_sw = 3000
         ALLOCATE(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4))
+      CASE ('sw2d_times') 
+!hsw_t, eta_t, qx_t, qy_t
+        ALLOCATE(this%sw2d_times(this%nt_sw))
       END SELECT
     END DO
   END SUBROUTINE RETURNSDT_INITIALISE
@@ -23646,6 +23649,127 @@ CONTAINS
     qy = 0._sp
   END SUBROUTINE INITIAL_LAKE_AT_REST_EMERSIVE_BUMP
 
+  SUBROUTINE INITIAL_BUMP_DRAIN(nrow, ncol, h, qx, qy, zb)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    h = 0.5_sp - zb
+    qx = 0._sp
+    qy = 0._sp
+  END SUBROUTINE INITIAL_BUMP_DRAIN
+
+  SUBROUTINE INITIAL_WET_DAMBREAK(nrow, ncol, h, qx, qy, zb)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    REAL(sp) :: hl, hr
+    INTEGER :: col
+    hl = 0.005_sp
+    hr = 0.001_sp
+    h = hl
+    DO col=ncol/2,ncol
+      h(:, col) = hr
+    END DO
+    qx = 0._sp
+    qy = 0._sp
+  END SUBROUTINE INITIAL_WET_DAMBREAK
+
+  SUBROUTINE INITIAL_DRY_DAMBREAK(nrow, ncol, h, qx, qy, zb)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    REAL(sp) :: hl, hr
+    INTEGER :: col
+    hl = 0.005_sp
+    hr = 0._sp
+    h = hl
+    DO col=ncol/2,ncol
+      h(:, col) = hr
+    END DO
+    qx = 0._sp
+    qy = 0._sp
+  END SUBROUTINE INITIAL_DRY_DAMBREAK
+
+  SUBROUTINE BC_BUMP_DRAIN(nrow, ncol, h, qx, qy, c)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    INTEGER, INTENT(IN) :: c
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+! 1
+    qx(:, 1) = 0._sp
+! 2
+    qy(1, :) = 0._sp
+! 3
+! h(:, ncol) = 0._sp
+    qx(:, ncol+1) = 0.1
+! 4
+    qy(nrow+1, :) = 0._sp
+  END SUBROUTINE BC_BUMP_DRAIN
+
+  SUBROUTINE BC_WET_DAMBREAK(nrow, ncol, h, qx, qy)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp) :: hl, hr
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+    hl = 0.005_sp
+    hr = 0.001_sp
+! 1
+    h(:, 1) = hl
+! 2
+    qy(1, :) = 0._sp
+! 3
+    h(:, ncol) = hr
+! 4
+    qy(nrow+1, :) = 0._sp
+  END SUBROUTINE BC_WET_DAMBREAK
+
+  SUBROUTINE BC_DRY_DAMBREAK(nrow, ncol, h, qx, qy)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp) :: hl, hr
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+    hl = 0.005_sp
+    hr = 0._sp
+! 1
+    h(:, 1) = hl
+! 2
+    qy(1, :) = 0._sp
+! 3
+    h(:, ncol) = hr
+! 4
+    qy(nrow+1, :) = 0._sp
+  END SUBROUTINE BC_DRY_DAMBREAK
+
   SUBROUTINE BC_WALL(nrow, ncol, h, qx, qy, c)
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: nrow, ncol
@@ -23721,7 +23845,8 @@ CONTAINS
     REAL(sp), DIMENSION(mesh%nac) :: ac_prcp
     INTEGER :: i, j, row, col, k, time_returns, nt_sw, nt_sw_old, ctt
     REAL(sp) :: t, dt
-    REAL(sp) :: heps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb
+    REAL(sp) :: heps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb, h, hh, &
+&   z
   END SUBROUTINE SHALLOW_WATER_2D_TIME_STEP
 
 END MODULE MD_ROUTING_OPERATOR_DIFF
