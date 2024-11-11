@@ -451,7 +451,36 @@ contains
 
     end subroutine kw_time_step
 
-    subroutine apply_simple_canal(nrow, ncol, h, qx, qy, c)
+
+    subroutine initial_macdonal(nrow, ncol, h, qx, qy, zb)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
+        
+        h = 0._sp
+
+        qx = 0._sp
+        qy = 0._sp
+    end subroutine initial_macdonal
+
+    subroutine initial_simple_wave(nrow, ncol, h, qx, qy, zb)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        real(sp), dimension(nrow, ncol), intent(in) :: zb
+        
+        h = 0._sp
+
+        qx = 0._sp
+        qy = 0._sp
+    end subroutine initial_simple_wave
+
+    subroutine bc_simple_wave(nrow, ncol, h, qx, qy, c)
         implicit none
         integer, intent(in) :: nrow, ncol
         real(sp), dimension(nrow, ncol), intent(inout) :: h
@@ -467,9 +496,9 @@ contains
         
         ! 1
         if (c .lt. 10) then
-            h(:, 1) = 2._sp
+            h(:, 1) = 0.3_sp
         else
-            h(:, 1) = 1._sp
+            h(:, 1) = 0._sp
         end if
         ! 2
         qy(1, :) = 0._sp
@@ -480,21 +509,43 @@ contains
         ! 4
         qy(nrow+1, :) = 0._sp
 
-    end subroutine apply_simple_canal
+    end subroutine bc_simple_wave
 
-    subroutine initial_macdonal(nrow, ncol, h, qx, qy, zb)
+
+
+    subroutine bc_gaussian_wave(nrow, ncol, h, qx, qy, time)
         implicit none
         integer, intent(in) :: nrow, ncol
         real(sp), dimension(nrow, ncol), intent(inout) :: h
         real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
         real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
-        real(sp), dimension(nrow, ncol), intent(in) :: zb
-        
-        h = 0._sp
+        real(sp), intent(in) :: time
+        real(sp) :: sigma, pi
 
-        qx = 0._sp
-        qy = 0._sp
-    end subroutine initial_macdonal
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+
+        sigma = sqrt(0.2_sp)
+        pi = 3.14_sp
+
+        ! 1
+        h(:, 1) = 1._sp / sigma / sqrt(2 * pi) * exp(- time  ** 2 / 2._sp / sigma ** 2)
+
+        ! 2
+        qy(1, :) = 0._sp
+
+        ! 3
+        qx(:, ncol+1) = 0._sp
+
+        ! 4
+        qy(nrow+1, :) = 0._sp
+
+    end subroutine bc_gaussian_wave
+
+
 
     subroutine bc_mac_donald(nrow, ncol, h, qx, qy, zb, c)
         implicit none
@@ -512,7 +563,6 @@ contains
         !                            4
         
         ! 1
-        ! h(:, 1) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
         qx(:, 1) = 2._sp
 
         ! 2
@@ -525,6 +575,50 @@ contains
         qy(nrow+1, :) = 0._sp
 
     end subroutine bc_mac_donald
+
+
+    subroutine bc_mac_donald_rain(nrow, ncol, h, qx, qy, c)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        integer, intent(in) :: c
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        
+        ! 1
+        qx(:, 1) = 1._sp
+
+        ! 2
+        qy(1, :) = 0._sp
+
+        ! 3
+        h(:, ncol) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
+
+        ! 4
+        qy(nrow+1, :) = 0._sp
+
+    end subroutine bc_mac_donald_rain
+    
+    
+    
+    subroutine macdonald_rainfall(nrow, ncol, h, dt)
+        implicit none
+
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), intent(in) :: dt
+        
+        h = h + dt * 0.001_sp
+
+    end subroutine macdonald_rainfall
+    
+    
     
     subroutine initial_bump(nrow, ncol, h, qx, qy, zb)
         implicit none
@@ -679,7 +773,6 @@ contains
         qy(1, :) = 0._sp
 
         ! 3
-        ! h(:, ncol) = 0._sp
         qx(:, ncol+1) = 0.1
 
         ! 4
@@ -849,16 +942,14 @@ contains
 
         ! initialisation
         t = (time_step - 1) * setup%dt
-        
-        ! call initial_macdonal(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
-        ! call initial_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
-        ! call initial_wet_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
-        call initial_dry_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+
+        call initial_macdonal(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
 
         heps = 1.e-6
         ctt = 1
 
         do while (t .lt. time_step * setup%dt .and. ctt .le. returns%nt_sw) 
+            ! print *, t, dt
             ! print *, ctt, t, time_step * setup%dt, setup%dt, time_step
             eta = zb + hsw
             
@@ -881,6 +972,11 @@ contains
                         (eta(row, col) - eta(row, col-1)) / mesh%dx(row, col)) / &
                         (1 + dt * gravity * manning(row, col) ** 2 * abs(qx(row, col)) &
                         / hfx ** (7._sp / 3._sp))
+
+                    if (abs(qx(row, col)) .lt. 1e-8) then
+                        qx(row, col) = 0._sp
+                    end if
+
                 end do
             end do
 
@@ -892,6 +988,10 @@ contains
                             (eta(row, col) - eta(row-1, col)) / mesh%dy(row, col)) / &
                             (1 + dt * gravity * manning(row, col) ** 2 * abs(qy(row, col)) &
                             / hfy ** (7._sp / 3._sp))
+
+                    if (abs(qy(row, col)) .lt. 1e-8) then
+                        qy(row, col) = 0._sp
+                    end if
 
                 end do
             end do
@@ -905,6 +1005,7 @@ contains
                     + dt / mesh%dy(row, col) * (qy(row, col) - qy(row+1, col)) 
 
                     ! hsw(row, col) = max(0._sp, hsw(row, col))
+
                     ! if (t .eq. ((time_step - 1) * setup%dt)) then
                     !     hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
                     !         / mesh%dx(row, col) / mesh%dy(row, col)
@@ -912,19 +1013,12 @@ contains
                     
                 end do
             end do
+            ! call macdonald_rainfall(mesh%nrow, mesh%ncol, hsw, dt)
 
-            ! call apply_bump_bc(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, ctt)
+            ! call bc_mac_donald_rain(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
+            call bc_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, ctt)
 
-            ! call apply_simple_canal(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
             
-            ! call bc_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, ctt)
-          
-            ! call bc_wall(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
-
-            ! call bc_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
-
-            call bc_dry_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy)
-
             ctt = ctt + 1
             t = t + dt
         end do

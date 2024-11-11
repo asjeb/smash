@@ -361,7 +361,7 @@ FEASIBLE_RR_PARAMETERS = dict(
             (0, np.inf),  # % llr
             (0, np.inf),  # % akw
             (0, np.inf),  # % bkw
-            (0, np.inf),  # % topography
+            (-np.inf, np.inf),  # % topography
             (0, np.inf),  # % manning
         ],
     )

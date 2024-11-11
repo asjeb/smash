@@ -23514,7 +23514,31 @@ CONTAINS
     END DO
   END SUBROUTINE KW_TIME_STEP
 
-  SUBROUTINE APPLY_SIMPLE_CANAL(nrow, ncol, h, qx, qy, c)
+  SUBROUTINE INITIAL_MACDONAL(nrow, ncol, h, qx, qy, zb)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    h = 0._sp
+    qx = 0._sp
+    qy = 0._sp
+  END SUBROUTINE INITIAL_MACDONAL
+
+  SUBROUTINE INITIAL_SIMPLE_WAVE(nrow, ncol, h, qx, qy, zb)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
+    h = 0._sp
+    qx = 0._sp
+    qy = 0._sp
+  END SUBROUTINE INITIAL_SIMPLE_WAVE
+
+  SUBROUTINE BC_SIMPLE_WAVE(nrow, ncol, h, qx, qy, c)
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: nrow, ncol
     REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
@@ -23528,9 +23552,9 @@ CONTAINS
 !                            4
 ! 1
     IF (c .LT. 10) THEN
-      h(:, 1) = 2._sp
+      h(:, 1) = 0.3_sp
     ELSE
-      h(:, 1) = 1._sp
+      h(:, 1) = 0._sp
     END IF
 ! 2
     qy(1, :) = 0._sp
@@ -23538,19 +23562,38 @@ CONTAINS
     qx(:, ncol+1) = 0._sp
 ! 4
     qy(nrow+1, :) = 0._sp
-  END SUBROUTINE APPLY_SIMPLE_CANAL
+  END SUBROUTINE BC_SIMPLE_WAVE
 
-  SUBROUTINE INITIAL_MACDONAL(nrow, ncol, h, qx, qy, zb)
+  SUBROUTINE BC_GAUSSIAN_WAVE(nrow, ncol, h, qx, qy, time)
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: nrow, ncol
     REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
     REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
     REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
-    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
-    h = 0._sp
-    qx = 0._sp
-    qy = 0._sp
-  END SUBROUTINE INITIAL_MACDONAL
+    REAL(sp), INTENT(IN) :: time
+    REAL(sp) :: sigma, pi
+    INTRINSIC SQRT
+    INTRINSIC EXP
+    REAL(sp) :: result1
+    REAL(sp) :: arg1
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+    sigma = SQRT(0.2_sp)
+    pi = 3.14_sp
+! 1
+    result1 = SQRT(2*pi)
+    arg1 = -(time**2/2._sp/sigma**2)
+    h(:, 1) = 1._sp/sigma/result1*EXP(arg1)
+! 2
+    qy(1, :) = 0._sp
+! 3
+    qx(:, ncol+1) = 0._sp
+! 4
+    qy(nrow+1, :) = 0._sp
+  END SUBROUTINE BC_GAUSSIAN_WAVE
 
   SUBROUTINE BC_MAC_DONALD(nrow, ncol, h, qx, qy, zb, c)
     IMPLICIT NONE
@@ -23569,7 +23612,6 @@ CONTAINS
 !  |------------------------------------------------------|
 !                            4
 ! 1
-! h(:, 1) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
     qx(:, 1) = 2._sp
 ! 2
     qy(1, :) = 0._sp
@@ -23580,6 +23622,41 @@ CONTAINS
 ! 4
     qy(nrow+1, :) = 0._sp
   END SUBROUTINE BC_MAC_DONALD
+
+  SUBROUTINE BC_MAC_DONALD_RAIN(nrow, ncol, h, qx, qy, c)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    INTEGER, INTENT(IN) :: c
+    INTRINSIC EXP
+    REAL(sp) :: pwx1
+    REAL(sp) :: pwr1
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+! 1
+    qx(:, 1) = 1._sp
+! 2
+    qy(1, :) = 0._sp
+! 3
+    pwx1 = 4._sp/gravity
+    pwr1 = pwx1**(1._sp/3._sp)
+    h(:, ncol) = pwr1*(1+0.5*EXP(-4._sp))
+! 4
+    qy(nrow+1, :) = 0._sp
+  END SUBROUTINE BC_MAC_DONALD_RAIN
+
+  SUBROUTINE MACDONALD_RAINFALL(nrow, ncol, h, dt)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), INTENT(IN) :: dt
+    h = h + dt*0.001_sp
+  END SUBROUTINE MACDONALD_RAINFALL
 
   SUBROUTINE INITIAL_BUMP(nrow, ncol, h, qx, qy, zb)
     IMPLICIT NONE
@@ -23716,7 +23793,6 @@ CONTAINS
 ! 2
     qy(1, :) = 0._sp
 ! 3
-! h(:, ncol) = 0._sp
     qx(:, ncol+1) = 0.1
 ! 4
     qy(nrow+1, :) = 0._sp
