@@ -466,7 +466,7 @@ contains
         qy = 0._sp
     end subroutine initial_macdonal
 
-    subroutine initial_simple_wave(nrow, ncol, h, qx, qy, zb)
+    subroutine initial_zero(nrow, ncol, h, qx, qy, zb)
         implicit none
         integer, intent(in) :: nrow, ncol
         real(sp), dimension(nrow, ncol), intent(inout) :: h
@@ -478,7 +478,7 @@ contains
 
         qx = 0._sp
         qy = 0._sp
-    end subroutine initial_simple_wave
+    end subroutine initial_zero
 
     subroutine bc_simple_wave(nrow, ncol, h, qx, qy, c)
         implicit none
@@ -873,46 +873,162 @@ contains
 
     end subroutine bc_wall
 
-    ! subroutine free_outflow(h, qx, qy, nrow, ncol)
-        ! implicit none
-        ! real(sp), dimension(nrow, ncol) :: h
-        ! real(sp), dimension(nrow, ncol+1) :: qx
-        ! real(sp), dimension(nrow+1, ncol) :: qy
-        ! do col = 1, mesh%ncol
+
+    subroutine free_outflow(mesh, hsw, zb, qx, qy, manning, dt)
+        implicit none
+
+        type(MeshDT), intent(in) :: mesh
+        real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: hsw, zb
+        real(sp), dimension(mesh%nrow, mesh%ncol+1), intent(inout) :: qx
+        real(sp), dimension(mesh%nrow+1, mesh%ncol), intent(inout) :: qy
+        real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: manning
+        real(sp), intent(in) :: dt
+
+        integer :: row, col
+        real (sp) :: sgn
+        real (sp) :: slope
+        real (sp) :: qout, volume_out
+
+
+        do col = 1, mesh%ncol
                 
-        !     ! up
-        !     ! dzb = zb(1, col) - zb(2, col)
-        !     ! qy(1, col) = hsw(1, col) ** (5._sp / 3._sp) * &
-        !     !     sqrt(abs(dzb) / mesh%dy(1, col)) / manning(1, col)
-        !     qy(1, col) = 0._sp ! wall
+            ! up
+            slope = (zb(1, col) - zb(2, col)) /  mesh%dy(1, col)
+            
+            if (slope .gt. 0) then
+                sgn = 1._sp
+            else
+                sgn = -1._sp
+            end if
 
-        !     ! down
-        !     ! dzb = zb(mesh%nrow-1, col) - zb(mesh%nrow, col)
-        !     ! qy(mesh%nrow+1, col) = hsw(mesh%nrow, col) ** (5._sp / 3._sp) * &
-        !     !     sqrt(abs(dzb) / mesh%dy(mesh%nrow, col)) / manning(mesh%nrow, col)
-        !     qy(mesh%nrow-1, col) = 0._sp ! wall
+            qy(1, col) = sgn * hsw(1, col) ** (5._sp / 3._sp) * &
+                sqrt(abs(slope)) / manning(1, col)
+            
+                
+            qout = qout + sgn * qy(1, col) 
 
-        ! end do
+            volume_out = volume_out + qout * mesh%dx(1, col) * dt
 
-        ! do row = 1, mesh%nrow
+            ! down
+            slope = (zb(mesh%nrow, col) - zb(mesh%nrow-1, col)) / mesh%dy(mesh%nrow, col)
+
+            if (slope .gt. 0) then
+                sgn = 1._sp
+            else
+                sgn = -1._sp
+            end if
+
+            qy(mesh%nrow+1, col) = sgn * hsw(mesh%nrow, col) ** (5._sp / 3._sp) * &
+                sqrt(abs(slope)) / manning(mesh%nrow, col)
+            
+
+            qout = qout + sgn * qy(mesh%nrow+1, col)
+
+            volume_out = volume_out + qout * mesh%dx(mesh%nrow, col) * dt
+
+        end do
+
+
+
+        do row = 1, mesh%nrow
                             
-        !     ! ! left
-        !     ! dzb = zb(row, 1) - zb(row, 2)
-        !     ! qx(row, 1) = hsw(row, 1) ** (5._sp / 3._sp) * &
-        !     !     sqrt(abs(dzb)) / mesh%dx(row, 1) / manning(row, 1)
-        !     qx(row, 1) = 2._sp ! qin 
-        !     qy(row, 1) = 0._sp ! qin
+            ! left
+            slope = (zb(row, 2) - zb(row, 1)) / mesh%dx(row, 1)
+
+            if (slope .gt. 0) then
+                sgn = 1
+            else
+                sgn = -1
+            end if
+            
+            qx(row, 1) = sgn * hsw(row, 1) ** (5._sp / 3._sp) * &
+                sqrt(abs(slope)) / manning(row, 1)
+
+
+            qout = qout + sgn * qx(row, 1)
+
+            volume_out = volume_out + qout * mesh%dy(row, 1) * dt
 
             ! right
-            ! dzb = zb(row, mesh%ncol-1) - zb(row, mesh%ncol)
-            ! qx(row, mesh%ncol+1) = hsw(row, mesh%ncol) ** (5._sp / 3._sp) * &
-            !     sqrt(abs(dzb)) / mesh%dx(row, mesh%ncol) / manning(row, mesh%ncol)
-            ! qx(row, mesh%ncol+1) = 0._sp ! wall
-        ! end do
-    ! do row=1, mesh%nrow
-    !     hsw(row, mesh%ncol) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
-    ! end do
-    ! end subroutine free_outflow
+            slope = (zb(row, mesh%ncol-1) - zb(row, mesh%ncol)) / mesh%dx(row, mesh%ncol)
+
+            if (slope .gt. 0) then
+                sgn = 1
+            else
+                sgn = -1
+            end if
+
+            qx(row, mesh%ncol+1) = hsw(row, mesh%ncol) ** (5._sp / 3._sp) * &
+                sqrt(abs(slope)) / manning(row, mesh%ncol)
+
+
+            qout = qout + sgn * qx(row, mesh%ncol+1)
+
+            volume_out = volume_out + qout * mesh%dy(row, mesh%ncol) * dt
+            
+        end do
+    end subroutine free_outflow
+
+
+
+    subroutine bc_thacker2d(nrow, ncol, h, qx, qy, c)
+        implicit none
+        integer, intent(in) :: nrow, ncol
+        real(sp), dimension(nrow, ncol), intent(inout) :: h
+        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
+        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
+        integer, intent(in) :: c
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        
+        ! 1
+        h(:, 1) = 0._sp
+
+        ! 2
+        h(1, :) = 0._sp
+
+        ! 3
+        h(:, ncol) = 0._sp
+
+        ! 4
+        h(nrow, :) = 0._sp
+
+    end subroutine bc_thacker2d
+
+
+
+    subroutine initial_thacker2d(mesh, h, qx, qy, zb)
+        implicit none
+        type(MeshDT), intent(in) :: mesh
+        real(sp), dimension(mesh%nrow, mesh%ncol), intent(inout) :: h
+        real(sp), dimension(mesh%nrow, mesh%ncol+1), intent(inout) :: qx
+        real(sp), dimension(mesh%nrow+1, mesh%ncol), intent(inout) :: qy
+        real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: zb
+        real(sp) :: a, b, hstar, v, L
+        integer :: col
+
+        a = 1._sp
+        b = 0.5_sp
+        hstar = 0.1_sp
+        gravity = 9.81_sp
+        L = 4._sp
+
+        do col=1, mesh%ncol
+            h(:, col) = max(0._sp, &
+            (b * hstar) / (a * a) * (2 * ((col-1) * mesh%dx(:, col) - L / 2.) - b) - zb(:, col))
+        end do
+        
+        v = sqrt(2 * gravity * hstar) / a
+        
+        qx(:, :) = 0._sp
+        qy(:, :) = h(:, :) * v 
+
+    end subroutine initial_thacker2d
+
 
 
     subroutine shallow_water_2d_time_step(setup, mesh, input_data, options, returns, &
@@ -934,46 +1050,67 @@ contains
         real(sp), dimension(mesh%nrow+1, mesh%ncol) :: qy
         real(sp), dimension(mesh%nac) :: ac_prcp
 
-        integer :: i, j, row, col, k, time_returns, nt_sw, nt_sw_old, ctt
+        integer :: i, j, row, col, k, time_returns, nt_sw, nt_sw_old, c_routing_time
         real(sp) :: t, dt
-        real(sp) :: heps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb, h, hh, z
-
+        real(sp) :: heps, qeps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb, h, hh, z
+        real(sp) :: qxc, qyc, theta
+        real(sp) :: bb, hh1, hh2, ee1, ee2
         !$AD start-exclude
 
         ! initialisation
         t = (time_step - 1) * setup%dt
-
-        call initial_macdonal(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+        
+        call initial_zero(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+        ! call initial_thacker2d(mesh, hsw, qx, qy, zb)
 
         heps = 1.e-6
-        ctt = 1
+        qeps = 1.e-8
+        c_routing_time = 1
+        theta = 1._sp
+        
 
-        do while (t .lt. time_step * setup%dt .and. ctt .le. returns%nt_sw) 
+        do while (t .lt. time_step * setup%dt .and. c_routing_time .le. returns%nt_sw) ! .and. time_step .le. 10
             ! print *, t, dt
-            ! print *, ctt, t, time_step * setup%dt, setup%dt, time_step
+            ! print *, c_routing_time, t, time_step * setup%dt, setup%dt, time_step
             eta = zb + hsw
             
-            returns%sw2d(:, :, ctt, 1) = hsw(:, :)
-            returns%sw2d(:, :, ctt, 2) = eta(:, :)
-            returns%sw2d(:, :, ctt, 3) = qx(:, :)
-            returns%sw2d(:, :, ctt, 4) = qy(:, :)
-            returns%sw2d_times(ctt) = t
+            returns%sw2d(:, :, c_routing_time, 1) = hsw(:, :)
+            returns%sw2d(:, :, c_routing_time, 2) = eta(:, :)
+            returns%sw2d(:, :, c_routing_time, 3) = qx(:, :)
+            returns%sw2d(:, :, c_routing_time, 4) = qy(:, :)
+            returns%sw2d_times(c_routing_time) = t
+
 
             maxhsw = max(heps, maxval(hsw))
            
             dt = 0.7 * min(minval(mesh%dx), minval(mesh%dy)) &
             / sqrt(gravity * maxhsw)
+            
+            ! print *, "c est le tab de dt qui plante !!!"
+            ! returns%sw2d_dt(c_routing_time) = dt
+            ! print *, "ne s affiche pas "
+            print *, dt, maxhsw
 
             do row = 1, mesh%nrow
                 do col = 2, mesh%ncol
 
-                    hfx = max(heps, max(eta(row, col-1), eta(row, col)) - max(zb(row, col-1), zb(row, col)))
-                    qx(row, col) = (qx(row, col) - dt * gravity * hfx * &
-                        (eta(row, col) - eta(row, col-1)) / mesh%dx(row, col)) / &
-                        (1 + dt * gravity * manning(row, col) ** 2 * abs(qx(row, col)) &
-                        / hfx ** (7._sp / 3._sp))
+                    hfx = max(eta(row, col-1), eta(row, col)) - max(zb(row, col-1), zb(row, col))
+                    
+                    if (hfx .ge. heps) then
 
-                    if (abs(qx(row, col)) .lt. 1e-8) then
+                        !theta = dt / mesh%dx(row, col) * min(abs(qx(row, col) / hfx), sqrt(gravity * hfx))
+                        
+                        qxc = theta * qx(row, col) + 0.5_sp * (1._sp - theta) * (qx(row, col-1) + qx(row, col+1))
+
+                        qx(row, col) = (qxc - dt * gravity * hfx * &
+                            (eta(row, col) - eta(row, col-1)) / mesh%dx(row, col)) / &
+                            (1 + dt * gravity * manning(row, col) ** 2 * abs(qx(row, col)) &
+                            / hfx ** (7._sp / 3._sp))
+                    else 
+                        qx(row, col) = 0._sp
+                    end if
+
+                    if (abs(qx(row, col)) .lt. qeps) then
                         qx(row, col) = 0._sp
                     end if
 
@@ -983,13 +1120,21 @@ contains
             do row = 2, mesh%nrow
                 do col = 1, mesh%ncol
 
-                    hfy = max(heps, max(eta(row-1, col), eta(row, col)) - max(zb(row-1, col), zb(row, col)))
-                    qy(row, col) = (qy(row, col) - dt * gravity * hfy * &
-                            (eta(row, col) - eta(row-1, col)) / mesh%dy(row, col)) / &
-                            (1 + dt * gravity * manning(row, col) ** 2 * abs(qy(row, col)) &
-                            / hfy ** (7._sp / 3._sp))
+                    hfy = max(eta(row-1, col), eta(row, col)) - max(zb(row-1, col), zb(row, col))
 
-                    if (abs(qy(row, col)) .lt. 1e-8) then
+                    if (hfy .ge. heps) then
+
+                        qyc = theta * qy(row, col) + 0.5_sp * (1._sp - theta) * (qy(row-1, col) + qy(row+1, col))
+
+                        qy(row, col) = (qyc - dt * gravity * hfy * &
+                                (eta(row, col) - eta(row-1, col)) / mesh%dy(row, col)) / &
+                                (1 + dt * gravity * manning(row, col) ** 2 * abs(qy(row, col)) &
+                                / hfy ** (7._sp / 3._sp))
+                    else 
+                        qy(row, col) = 0._sp
+                    end if
+
+                    if (abs(qy(row, col)) .lt. qeps) then
                         qy(row, col) = 0._sp
                     end if
 
@@ -1002,24 +1147,23 @@ contains
                     k = mesh%rowcol_to_ind_ac(row, col)
                             
                     hsw(row, col) = hsw(row, col) + dt / mesh%dx(row, col) * (qx(row, col) - qx(row, col+1)) & 
-                    + dt / mesh%dy(row, col) * (qy(row, col) - qy(row+1, col)) 
+                    + dt / mesh%dy(row, col) * (qy(row, col) - qy(row+1, col))
 
-                    ! hsw(row, col) = max(0._sp, hsw(row, col))
+                    hsw(row, col) = max(0._sp, hsw(row, col))
 
-                    ! if (t .eq. ((time_step - 1) * setup%dt)) then
-                    !     hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
-                    !         / mesh%dx(row, col) / mesh%dy(row, col)
-                    ! end if
+                    if (t .eq. ((time_step - 1) * setup%dt)) then
+                        hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
+                            / mesh%dx(row, col) / mesh%dy(row, col)
+                    end if
                     
                 end do
             end do
-            ! call macdonald_rainfall(mesh%nrow, mesh%ncol, hsw, dt)
 
-            ! call bc_mac_donald_rain(mesh%nrow, mesh%ncol, hsw, qx, qy, ctt)
-            call bc_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, ctt)
-
+            call free_outflow(mesh, hsw, zb, qx, qy, manning, dt)
             
-            ctt = ctt + 1
+            !call bc_wall(mesh%nrow, mesh%ncol, hsw, qx, qy, c_routing_time)
+
+            c_routing_time = c_routing_time + 1
             t = t + dt
         end do
 

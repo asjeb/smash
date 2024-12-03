@@ -2683,6 +2683,8 @@ MODULE MWD_RETURNS_DIFF
   USE MWD_RR_STATES_DIFF
   IMPLICIT NONE
 !$F90W index-array
+! real(sp), dimension(:, :, :, :, :), allocatable :: sw2d
+! real(sp), dimension(:, :), allocatable :: sw2d_times
   TYPE RETURNSDT
       INTEGER :: nmts
       LOGICAL, DIMENSION(:), ALLOCATABLE :: mask_time_step
@@ -2709,6 +2711,7 @@ MODULE MWD_RETURNS_DIFF
       INTEGER :: nt_sw
       REAL(sp), DIMENSION(:, :, :, :), ALLOCATABLE :: sw2d
       REAL(sp), DIMENSION(:), ALLOCATABLE :: sw2d_times
+      REAL(sp), DIMENSION(:), ALLOCATABLE :: sw2d_dt
   END TYPE RETURNSDT
 
 CONTAINS
@@ -2765,10 +2768,14 @@ CONTAINS
 &       setup%n_internal_fluxes))
       CASE ('sw2d') 
         this%nt_sw = 3000
+! allocate(this%sw2d(mesh%nrow, mesh%ncol, 10, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
         ALLOCATE(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4))
       CASE ('sw2d_times') 
 !hsw_t, eta_t, qx_t, qy_t
+! allocate(this%sw2d_times(10, this%nt_sw))
         ALLOCATE(this%sw2d_times(this%nt_sw))
+      CASE ('sw2d_dt') 
+        ALLOCATE(this%sw2d_dt(this%nt_sw))
       END SELECT
     END DO
   END SUBROUTINE RETURNSDT_INITIALISE
@@ -22479,7 +22486,7 @@ CONTAINS
     qy = 0._sp
   END SUBROUTINE INITIAL_MACDONAL
 
-  SUBROUTINE INITIAL_SIMPLE_WAVE(nrow, ncol, h, qx, qy, zb)
+  SUBROUTINE INITIAL_ZERO(nrow, ncol, h, qx, qy, zb)
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: nrow, ncol
     REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
@@ -22489,7 +22496,7 @@ CONTAINS
     h = 0._sp
     qx = 0._sp
     qy = 0._sp
-  END SUBROUTINE INITIAL_SIMPLE_WAVE
+  END SUBROUTINE INITIAL_ZERO
 
   SUBROUTINE BC_SIMPLE_WAVE(nrow, ncol, h, qx, qy, c)
     IMPLICIT NONE
@@ -22821,40 +22828,158 @@ CONTAINS
     qy(nrow+1, :) = 0._sp
   END SUBROUTINE BC_WALL
 
-! subroutine free_outflow(h, qx, qy, nrow, ncol)
-! implicit none
-! real(sp), dimension(nrow, ncol) :: h
-! real(sp), dimension(nrow, ncol+1) :: qx
-! real(sp), dimension(nrow+1, ncol) :: qy
-! do col = 1, mesh%ncol
-!     ! up
-!     ! dzb = zb(1, col) - zb(2, col)
-!     ! qy(1, col) = hsw(1, col) ** (5._sp / 3._sp) * &
-!     !     sqrt(abs(dzb) / mesh%dy(1, col)) / manning(1, col)
-!     qy(1, col) = 0._sp ! wall
-!     ! down
-!     ! dzb = zb(mesh%nrow-1, col) - zb(mesh%nrow, col)
-!     ! qy(mesh%nrow+1, col) = hsw(mesh%nrow, col) ** (5._sp / 3._sp) * &
-!     !     sqrt(abs(dzb) / mesh%dy(mesh%nrow, col)) / manning(mesh%nrow, col)
-!     qy(mesh%nrow-1, col) = 0._sp ! wall
-! end do
-! do row = 1, mesh%nrow
-!     ! ! left
-!     ! dzb = zb(row, 1) - zb(row, 2)
-!     ! qx(row, 1) = hsw(row, 1) ** (5._sp / 3._sp) * &
-!     !     sqrt(abs(dzb)) / mesh%dx(row, 1) / manning(row, 1)
-!     qx(row, 1) = 2._sp ! qin 
-!     qy(row, 1) = 0._sp ! qin
+  SUBROUTINE FREE_OUTFLOW(mesh, hsw, zb, qx, qy, manning, dt)
+    IMPLICIT NONE
+    TYPE(MESHDT), INTENT(IN) :: mesh
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol), INTENT(IN) :: hsw, zb
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(mesh%nrow+1, mesh%ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol), INTENT(IN) :: manning
+    REAL(sp), INTENT(IN) :: dt
+    INTEGER :: row, col
+    REAL(sp) :: sgn
+    REAL(sp) :: slope
+    REAL(sp) :: qout, volume_out
+    INTRINSIC ABS
+    INTRINSIC SQRT
+    REAL(sp) :: abs0
+    REAL(sp) :: abs1
+    REAL(sp) :: abs2
+    REAL(sp) :: abs3
+    REAL(sp) :: pwr1
+    REAL(sp) :: result1
+    DO col=1,mesh%ncol
+! up
+      slope = (zb(1, col)-zb(2, col))/mesh%dy(1, col)
+      IF (slope .GT. 0) THEN
+        sgn = 1._sp
+      ELSE
+        sgn = -1._sp
+      END IF
+      IF (slope .GE. 0.) THEN
+        abs0 = slope
+      ELSE
+        abs0 = -slope
+      END IF
+      pwr1 = hsw(1, col)**(5._sp/3._sp)
+      result1 = SQRT(abs0)
+      qy(1, col) = sgn*pwr1*result1/manning(1, col)
+      qout = qout + sgn*qy(1, col)
+      volume_out = volume_out + qout*mesh%dx(1, col)*dt
+! down
+      slope = (zb(mesh%nrow, col)-zb(mesh%nrow-1, col))/mesh%dy(mesh%&
+&       nrow, col)
+      IF (slope .GT. 0) THEN
+        sgn = 1._sp
+      ELSE
+        sgn = -1._sp
+      END IF
+      IF (slope .GE. 0.) THEN
+        abs1 = slope
+      ELSE
+        abs1 = -slope
+      END IF
+      pwr1 = hsw(mesh%nrow, col)**(5._sp/3._sp)
+      result1 = SQRT(abs1)
+      qy(mesh%nrow+1, col) = sgn*pwr1*result1/manning(mesh%nrow, col)
+      qout = qout + sgn*qy(mesh%nrow+1, col)
+      volume_out = volume_out + qout*mesh%dx(mesh%nrow, col)*dt
+    END DO
+    DO row=1,mesh%nrow
+! left
+      slope = (zb(row, 2)-zb(row, 1))/mesh%dx(row, 1)
+      IF (slope .GT. 0) THEN
+        sgn = 1
+      ELSE
+        sgn = -1
+      END IF
+      IF (slope .GE. 0.) THEN
+        abs2 = slope
+      ELSE
+        abs2 = -slope
+      END IF
+      pwr1 = hsw(row, 1)**(5._sp/3._sp)
+      result1 = SQRT(abs2)
+      qx(row, 1) = sgn*pwr1*result1/manning(row, 1)
+      qout = qout + sgn*qx(row, 1)
+      volume_out = volume_out + qout*mesh%dy(row, 1)*dt
 ! right
-! dzb = zb(row, mesh%ncol-1) - zb(row, mesh%ncol)
-! qx(row, mesh%ncol+1) = hsw(row, mesh%ncol) ** (5._sp / 3._sp) * &
-!     sqrt(abs(dzb)) / mesh%dx(row, mesh%ncol) / manning(row, mesh%ncol)
-! qx(row, mesh%ncol+1) = 0._sp ! wall
-! end do
-! do row=1, mesh%nrow
-!     hsw(row, mesh%ncol) = (4._sp / gravity) ** (1._sp / 3._sp) * (1 + 0.5 * exp(-4._sp))
-! end do
-! end subroutine free_outflow
+      slope = (zb(row, mesh%ncol-1)-zb(row, mesh%ncol))/mesh%dx(row, &
+&       mesh%ncol)
+      IF (slope .GT. 0) THEN
+        sgn = 1
+      ELSE
+        sgn = -1
+      END IF
+      IF (slope .GE. 0.) THEN
+        abs3 = slope
+      ELSE
+        abs3 = -slope
+      END IF
+      pwr1 = hsw(row, mesh%ncol)**(5._sp/3._sp)
+      result1 = SQRT(abs3)
+      qx(row, mesh%ncol+1) = pwr1*result1/manning(row, mesh%ncol)
+      qout = qout + sgn*qx(row, mesh%ncol+1)
+      volume_out = volume_out + qout*mesh%dy(row, mesh%ncol)*dt
+    END DO
+  END SUBROUTINE FREE_OUTFLOW
+
+  SUBROUTINE BC_THACKER2D(nrow, ncol, h, qx, qy, c)
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: nrow, ncol
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
+    INTEGER, INTENT(IN) :: c
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+! 1
+    h(:, 1) = 0._sp
+! 2
+    h(1, :) = 0._sp
+! 3
+    h(:, ncol) = 0._sp
+! 4
+    h(nrow, :) = 0._sp
+  END SUBROUTINE BC_THACKER2D
+
+  SUBROUTINE INITIAL_THACKER2D(mesh, h, qx, qy, zb)
+    IMPLICIT NONE
+    TYPE(MESHDT), INTENT(IN) :: mesh
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(mesh%nrow+1, mesh%ncol), INTENT(INOUT) :: qy
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol), INTENT(IN) :: zb
+    REAL(sp) :: a, b, hstar, v, l
+    INTEGER :: col
+    INTRINSIC MAX
+    INTRINSIC SQRT
+    REAL(sp) :: arg1
+    REAL(sp) :: result1
+    a = 1._sp
+    b = 0.5_sp
+    hstar = 0.1_sp
+    gravity = 9.81_sp
+    l = 4._sp
+    DO col=1,mesh%ncol
+      WHERE (0._sp .LT. b*hstar/(a*a)*(2*((col-1)*mesh%dx(:, col)-l/2.)-&
+&         b) - zb(:, col)) 
+        h(:, col) = b*hstar/(a*a)*(2*((col-1)*mesh%dx(:, col)-l/2.)-b) -&
+&         zb(:, col)
+      ELSEWHERE
+        h(:, col) = 0._sp
+      END WHERE
+    END DO
+    arg1 = 2*gravity*hstar
+    result1 = SQRT(arg1)
+    v = result1/a
+    qx(:, :) = 0._sp
+    qy(:, :) = h(:, :)*v
+  END SUBROUTINE INITIAL_THACKER2D
+
   SUBROUTINE SHALLOW_WATER_2D_TIME_STEP(setup, mesh, input_data, options&
 &   , returns, time_step, ac_qtz, zb, manning, ac_qz)
     IMPLICIT NONE
@@ -22872,10 +22997,13 @@ CONTAINS
     REAL(sp), DIMENSION(mesh%nrow, mesh%ncol+1) :: qx
     REAL(sp), DIMENSION(mesh%nrow+1, mesh%ncol) :: qy
     REAL(sp), DIMENSION(mesh%nac) :: ac_prcp
-    INTEGER :: i, j, row, col, k, time_returns, nt_sw, nt_sw_old, ctt
+    INTEGER :: i, j, row, col, k, time_returns, nt_sw, nt_sw_old, &
+&   c_routing_time
     REAL(sp) :: t, dt
-    REAL(sp) :: heps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb, h, hh, &
-&   z
+    REAL(sp) :: heps, qeps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb, h&
+&   , hh, z
+    REAL(sp) :: qxc, qyc, theta
+    REAL(sp) :: bb, hh1, hh2, ee1, ee2
   END SUBROUTINE SHALLOW_WATER_2D_TIME_STEP
 
 END MODULE MD_ROUTING_OPERATOR_DIFF

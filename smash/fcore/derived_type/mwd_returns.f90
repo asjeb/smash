@@ -79,8 +79,14 @@ module mwd_returns
         logical :: internal_fluxes_flag = .false.
         
         integer :: nt_sw
+        ! real(sp), dimension(:, :, :, :, :), allocatable :: sw2d
         real(sp), dimension(:, :, :, :), allocatable :: sw2d
+
+        ! real(sp), dimension(:, :), allocatable :: sw2d_times
         real(sp), dimension(:), allocatable :: sw2d_times
+
+        real(sp), dimension(:), allocatable :: sw2d_dt
+
 
     end type ReturnsDT
 
@@ -156,10 +162,15 @@ contains
             
             case ("sw2d")
                 this%nt_sw = 3000
+                ! allocate(this%sw2d(mesh%nrow, mesh%ncol, 10, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
                 allocate(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
-            
+
             case ("sw2d_times")
+                ! allocate(this%sw2d_times(10, this%nt_sw))
                 allocate(this%sw2d_times(this%nt_sw))
+            
+            case ("sw2d_dt")
+                allocate(this%sw2d_dt(this%nt_sw))
 
             end select
 
