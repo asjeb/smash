@@ -2767,7 +2767,7 @@ CONTAINS
         ALLOCATE(this%internal_fluxes(mesh%nrow, mesh%ncol, this%nmts, &
 &       setup%n_internal_fluxes))
       CASE ('sw2d') 
-        this%nt_sw = 3000
+        this%nt_sw = 10000
 ! allocate(this%sw2d(mesh%nrow, mesh%ncol, 10, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
         ALLOCATE(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4))
       CASE ('sw2d_times') 
@@ -23533,19 +23533,20 @@ CONTAINS
     qy = 0._sp
   END SUBROUTINE INITIAL_MACDONAL
 
-  SUBROUTINE INITIAL_ZERO(nrow, ncol, h, qx, qy, zb)
+  SUBROUTINE INITIAL_ZERO(nrow, ncol, h, heps, qx, qy, zb)
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: nrow, ncol
     REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
+    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: heps
     REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
     REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
     REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
-    h = 0._sp
+    h = heps
     qx = 0._sp
     qy = 0._sp
   END SUBROUTINE INITIAL_ZERO
 
-  SUBROUTINE BC_SIMPLE_WAVE(nrow, ncol, h, qx, qy, c)
+  SUBROUTINE BC_MACDONALD_WAVE(nrow, ncol, h, qx, qy, c)
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: nrow, ncol
     REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
@@ -23569,7 +23570,7 @@ CONTAINS
     qx(:, ncol+1) = 0._sp
 ! 4
     qy(nrow+1, :) = 0._sp
-  END SUBROUTINE BC_SIMPLE_WAVE
+  END SUBROUTINE BC_MACDONALD_WAVE
 
   SUBROUTINE BC_GAUSSIAN_WAVE(nrow, ncol, h, qx, qy, time)
     IMPLICIT NONE
@@ -23713,8 +23714,8 @@ CONTAINS
     qy = 0._sp
   END SUBROUTINE INITIAL_LAKE_AT_REST_IMMERSIVE_BUMP
 
-  SUBROUTINE INITIAL_LAKE_AT_REST_EMERSIVE_BUMP(nrow, ncol, h, qx, qy, &
-&   zb)
+  SUBROUTINE INITIAL_LAKE_AT_REST_EMERGED_BUMP(nrow, ncol, h, qx, qy, zb&
+& )
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: nrow, ncol
     REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
@@ -23731,7 +23732,7 @@ CONTAINS
     h(:, :) = max1 - zb(:, :)
     qx = 0._sp
     qy = 0._sp
-  END SUBROUTINE INITIAL_LAKE_AT_REST_EMERSIVE_BUMP
+  END SUBROUTINE INITIAL_LAKE_AT_REST_EMERGED_BUMP
 
   SUBROUTINE INITIAL_BUMP_DRAIN(nrow, ncol, h, qx, qy, zb)
     IMPLICIT NONE
@@ -23971,28 +23972,6 @@ CONTAINS
     END DO
   END SUBROUTINE FREE_OUTFLOW
 
-  SUBROUTINE BC_THACKER2D(nrow, ncol, h, qx, qy, c)
-    IMPLICIT NONE
-    INTEGER, INTENT(IN) :: nrow, ncol
-    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
-    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
-    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
-    INTEGER, INTENT(IN) :: c
-!                            2
-!  |------------------------------------------------------|
-! 1|                                                      |3
-!  |------------------------------------------------------|
-!                            4
-! 1
-    h(:, 1) = 0._sp
-! 2
-    h(1, :) = 0._sp
-! 3
-    h(:, ncol) = 0._sp
-! 4
-    h(nrow, :) = 0._sp
-  END SUBROUTINE BC_THACKER2D
-
   SUBROUTINE INITIAL_THACKER2D(mesh, h, qx, qy, zb)
     IMPLICIT NONE
     TYPE(MESHDT), INTENT(IN) :: mesh
@@ -24051,6 +24030,7 @@ CONTAINS
 &   , hh, z
     REAL(sp) :: qxc, qyc, theta
     REAL(sp) :: bb, hh1, hh2, ee1, ee2
+    REAL(sp) :: volume_in, volume_out
   END SUBROUTINE SHALLOW_WATER_2D_TIME_STEP
 
 END MODULE MD_ROUTING_OPERATOR_DIFF
