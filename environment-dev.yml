@@ -2,7 +2,7 @@ name: smash-dev
 channels:
     - conda-forge
 dependencies:
-    - python=3.11
+    - python=3.12
     - pip
 
     # required dependencies
@@ -14,6 +14,7 @@ dependencies:
     - numpy
     - f90wrap
     - versioneer[toml]
+    - geopandas
     - rasterio
     - pandas
     - h5py
