@@ -22,6 +22,7 @@ from smash._constant import (
 from smash.core.model._read_input_data import (
     _read_descriptor,
     _read_imperviousness,
+    _read_bathymetry,
     _read_pet,
     _read_prcp,
     _read_qobs,
@@ -105,6 +106,11 @@ def _build_input_data(setup: SetupDT, mesh: MeshDT, input_data: Input_DataDT):
 
         if setup.read_imperviousness:
             _read_imperviousness(setup, mesh, input_data)
+
+        if setup.read_bathymetry:
+            _read_bathymetry(setup, mesh, input_data)
+
+
 
     if setup.prcp_partitioning:
         wrap_compute_prcp_partitioning(setup, mesh, input_data)  # % Fortran subroutine

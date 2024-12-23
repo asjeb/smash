@@ -712,6 +712,9 @@ DEFAULT_MODEL_SETUP = {
     "read_imperviousness": False,
     "imperviousness_format": "tif",
     "imperviousness_file": None,
+    "read_bathymetry": False,
+    "bathymetry_format": "tif",
+    "bathymetry_file": None,
 }
 
 

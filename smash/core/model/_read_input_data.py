@@ -172,6 +172,8 @@ def _read_windowed_raster(path: FilePath, mesh: MeshDT) -> tuple[np.ndarray, dic
             window=rasterio.windows.Window(pxoff, pyoff, pwin_xsize, pwin_ysize),
             out=arr[arr_yslice, arr_xslice],
         )
+        # print(arr_yslice)
+        # print(arr_xslice)
 
         # % Manage NoData
         nodata = ds.nodata
@@ -629,3 +631,25 @@ def _read_imperviousness(setup: SetupDT, mesh: MeshDT, input_data: Input_DataDT)
 
     if np.ma.is_masked(imperviousness):
         warnings.warn(f"{msg} \n Masked values are not applied", stacklevel=2)
+
+def _read_bathymetry(setup: SetupDT, mesh: MeshDT, input_data: Input_DataDT):
+    # reading data
+    bathymetry, warning = _read_windowed_raster(setup.bathymetry_file, mesh)
+
+    # check values expected
+    mask = bathymetry != -99.0
+
+    low = np.min(bathymetry, where=mask, initial=np.inf)
+
+    if low < 0:
+        raise ValueError(
+            f"Invalid bathymetry. Values must be greater than 0"
+        )
+        
+    # write bathymetry rate into fortran variable
+    input_data.physio_data.bathymetry = bathymetry
+
+    msg = _get_reading_warning_message(warning)
+
+    if msg:
+        warnings.warn(f"Warning(s) linked to bathymetry reading.\n{msg}", stacklevel=2)

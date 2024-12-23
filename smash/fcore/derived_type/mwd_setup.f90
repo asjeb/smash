@@ -138,6 +138,10 @@ module mwd_setup
         character(lchar) :: imperviousness_format = "..." !$F90W char
         character(2*lchar) :: imperviousness_file = "..." !$F90W char
 
+        logical :: read_bathymetry = .false.
+        character(lchar) :: bathymetry_format = "..." !$F90W char
+        character(2*lchar) :: bathymetry_file = "..." !$F90W char
+
         ! Post processed variables
         character(lchar) :: structure = "..." !$F90W char
         logical :: snow_module_present = .false.

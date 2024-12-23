@@ -448,6 +448,20 @@ def _standardize_model_setup_imperviousness_file(
     return _standardize_model_setup_file(read_imperviousness, "imperviousness_file", imperviousness_file)
 
 
+def _standardize_model_setup_read_bathymetry(read_bathymetry: bool, **kwargs) -> bool:
+    return _standardize_model_setup_bool("read_bathymetry", read_bathymetry)
+
+
+def _standardize_model_setup_bathymetry_format(bathymetry_format: str, **kwargs) -> str:
+    return _standardize_model_setup_format("bathymetry_format", bathymetry_format)
+
+
+def _standardize_model_setup_bathymetry_file(
+    read_bathymetry: bool, bathymetry_file: str, **kwargs
+) -> str:
+    return _standardize_model_setup_file(read_bathymetry, "bathymetry_file", bathymetry_file)
+
+
 def _standardize_model_setup_hidden_neuron(hidden_neuron: Numeric | ListLike, **kwargs) -> np.ndarray:
     standardized_hidden_neuron = np.zeros(int(len(NN_PARAMETERS_KEYS) / 2) - 1, dtype=np.int32)
 
