@@ -15,7 +15,7 @@ module md_routing_operator
     use md_constant !% only : sp
     use mwd_setup !% only: SetupDT
     use mwd_mesh !% only: MeshDT
-    use mwd_input_data !% only: Input_DataDT !% lie au prcp
+    use mwd_input_data !% only: Input_DataDT ! physio_data%bathymetry
     use mwd_options !% only: OptionsDT
     use mwd_returns !% only: ReturnsDT
     use mwd_atmos_manipulation !% get_ac_atmos_data_time_step
@@ -466,20 +466,6 @@ contains
         qy = 0._sp
     end subroutine initial_macdonal
 
-    subroutine initial_zero(nrow, ncol, h, heps, qx, qy, zb)
-        implicit none
-        integer, intent(in) :: nrow, ncol
-        real(sp), dimension(nrow, ncol), intent(inout) :: h
-        real(sp), dimension(nrow, ncol), intent(in) :: heps
-        real(sp), dimension(nrow, ncol+1), intent(inout) :: qx
-        real(sp), dimension(nrow+1, ncol), intent(inout) :: qy
-        real(sp), dimension(nrow, ncol), intent(in) :: zb
-        
-        h = heps
-
-        qx = 0._sp
-        qy = 0._sp
-    end subroutine initial_zero
 
     subroutine bc_macdonald_wave(nrow, ncol, h, qx, qy, c)
         implicit none
@@ -875,6 +861,67 @@ contains
     end subroutine bc_wall
 
 
+    subroutine initial_height(mesh, h, h0, qx, qy)
+        implicit none
+        type(MeshDT), intent(in) :: mesh
+        real(sp), dimension(mesh%nrow, mesh%ncol), intent(inout) :: h
+        real(sp), intent(in) :: h0
+        real(sp), dimension(mesh%nrow, mesh%ncol+1), intent(inout) :: qx
+        real(sp), dimension(mesh%nrow+1, mesh%ncol), intent(inout) :: qy
+        integer :: row, col
+
+        do row = 1, mesh%nrow
+            do col = 1, mesh%ncol
+                if (mesh%active_cell(row, col) .eq. 0 .or. mesh%local_active_cell(row, col) .eq. 0) cycle
+                h(row, col) = h0
+                qx(row, col) = 0._sp
+                qy(row, col) = 0._sp
+            end do
+        end do
+    end subroutine initial_height
+
+
+
+    subroutine bc_height(mesh, h, bc_h)
+        implicit none
+        type(MeshDT), intent(in) :: mesh
+        real(sp), dimension(mesh%nrow, mesh%ncol), intent(inout) :: h
+        real(sp), intent(in) :: bc_h
+        integer :: row, col
+
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+        do row = 1, mesh%nrow
+            ! 1
+            if (mesh%active_cell(row, 1) .eq. 0 .or. &
+                mesh%local_active_cell(row, 1) .eq. 0) cycle       
+            h(row, 1) = bc_h
+
+            ! 3
+            if (mesh%active_cell(row, mesh%ncol) .eq. 0 .or. &
+                mesh%local_active_cell(row, mesh%ncol) .eq. 0) cycle
+            h(row, mesh%ncol) = bc_h
+        end do
+
+        do col = 1, mesh%ncol
+            ! 2
+            if (mesh%active_cell(1, col) .eq. 0 .or. &
+                mesh%local_active_cell(1, col) .eq. 0) cycle
+            h(1, col) = bc_h
+
+            ! 4
+            if (mesh%active_cell(mesh%nrow, col) .eq. 0 .or. &
+                mesh%local_active_cell(mesh%nrow, col) .eq. 0) cycle
+            h(mesh%nrow, col) = bc_h
+        end do
+
+    end subroutine bc_height
+
+
+
     subroutine free_outflow(mesh, hsw, zb, qx, qy, manning, dt)
         implicit none
 
@@ -892,8 +939,11 @@ contains
 
 
         do col = 1, mesh%ncol
-                
+
             ! up
+            if (mesh%active_cell(1, col) .eq. 0 .or. &
+                mesh%local_active_cell(1, col) .eq. 0) cycle
+
             slope = (zb(1, col) - zb(2, col)) /  mesh%dy(1, col)
             
             if (slope .gt. 0) then
@@ -911,6 +961,9 @@ contains
             volume_out = volume_out + qout * mesh%dx(1, col) * dt
 
             ! down
+            if (mesh%active_cell(mesh%nrow, col) .eq. 0 .or. &
+                mesh%local_active_cell(mesh%nrow, col) .eq. 0) cycle
+
             slope = (zb(mesh%nrow, col) - zb(mesh%nrow-1, col)) / mesh%dy(mesh%nrow, col)
 
             if (slope .gt. 0) then
@@ -929,11 +982,12 @@ contains
 
         end do
 
-
-
         do row = 1, mesh%nrow
                             
             ! left
+            if (mesh%active_cell(row, 1) .eq. 0 .or. &
+            mesh%local_active_cell(row, 1) .eq. 0) cycle
+            
             slope = (zb(row, 2) - zb(row, 1)) / mesh%dx(row, 1)
 
             if (slope .gt. 0) then
@@ -951,6 +1005,9 @@ contains
             volume_out = volume_out + qout * mesh%dy(row, 1) * dt
 
             ! right
+            if (mesh%active_cell(row, mesh%ncol) .eq. 0 .or. &
+            mesh%local_active_cell(row, mesh%ncol) .eq. 0) cycle
+            
             slope = (zb(row, mesh%ncol-1) - zb(row, mesh%ncol)) / mesh%dx(row, mesh%ncol)
 
             if (slope .gt. 0) then
@@ -1003,7 +1060,7 @@ contains
 
 
     subroutine shallow_water_2d_time_step(setup, mesh, input_data, options, returns, &
-            time_step, ac_qtz, zb, manning, ac_qz)
+            time_step, ac_qtz, manning, ac_qz)
         implicit none
 
         type(SetupDT), intent(in) :: setup
@@ -1013,7 +1070,7 @@ contains
         type(ReturnsDT), intent(inout) :: returns
         integer, intent(in) :: time_step
         real(sp), dimension(mesh%nac, setup%nqz), intent(in) :: ac_qtz
-        real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: zb, manning
+        real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: manning
         real(sp), dimension(mesh%nac, setup%nqz), intent(inout) :: ac_qz
         ! real(sp), dimension(:, :, :), allocatable :: hsw_t, eta_t, qx_t, qy_t
         real(sp), dimension(mesh%nrow, mesh%ncol) :: hsw, eta
@@ -1027,13 +1084,24 @@ contains
         real(sp) :: qxc, qyc, theta
         real(sp) :: bb, hh1, hh2, ee1, ee2
         real(sp) :: volume_in, volume_out
-        
+        real(sp), dimension(mesh%nrow, mesh%ncol) :: zb
+        real(sp) :: h_init
+
+        c_routing_time = 1
+
+        hsw(:, :) = returns%sw2d(:, :, c_routing_time, 1)
+        eta(:, :) = returns%sw2d(:, :, c_routing_time, 2)
+        qx(:, :) = returns%sw2d(:, :, c_routing_time, 3)
+        qy(:, :) = returns%sw2d(:, :, c_routing_time, 4)
+
+        zb = input_data%physio_data%bathymetry
+        ! print(zb)
+
         !$AD start-exclude
         ! initialisation
         t = (time_step - 1) * setup%dt
         
         ! print *, time_step
-        ! call initial_zero(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
         ! call initial_thacker2d(mesh, hsw, qx, qy, zb)
         ! call initial_lake_at_rest_immersive_bump(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
         ! call initial_bump(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
@@ -1041,29 +1109,36 @@ contains
         ! call initial_thacker2d(mesh, hsw, qx, qy, zb)
         ! call initial_dry_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
         ! call initial_wet_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
-        call initial_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
+        ! call initial_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
 
         ! volume_in = sum(hsw * mesh%dx * mesh%dy)
         
         heps = 1.e-6 ! under heps the water height is considered as 0
-
         qeps = 1.e-8
-        c_routing_time = 1
-
+        h_init = 1.
+        
+        call initial_height(mesh, hsw, h_init, qx, qy)
+        
         do while (t .lt. time_step * setup%dt .and. c_routing_time .le. returns%nt_sw) 
-            eta = zb + hsw
-
+            
+            do row = 1, mesh%nrow
+                do col = 1, mesh%ncol
+                    if (mesh%active_cell(row, col) .eq. 0 .or. mesh%local_active_cell(row, col) .eq. 0) cycle
+                    eta(row, col) = zb(row, col) + hsw(row, col)
+                end do
+            end do
+            
             print *, t, dt
 
-            ! print *, time_step
-            ! print *, "topo ="
-            ! print *, zb
+            print *, time_step
+            print *, "topo ="
+            print *, zb
 
-            ! print *, "hsw ="
-            ! print *, hsw
+            print *, "hsw ="
+            print *, hsw
             
-            ! print *, "eta ="
-            ! print *, eta
+            print *, "eta ="
+            print *, eta
             
             returns%sw2d(:, :, c_routing_time, 1) = hsw(:, :)
             returns%sw2d(:, :, c_routing_time, 2) = eta(:, :)
@@ -1079,7 +1154,8 @@ contains
 
             do row = 1, mesh%nrow
                 do col = 2, mesh%ncol
-
+                    if (mesh%active_cell(row, col) .eq. 0 .or. mesh%local_active_cell(row, col) .eq. 0) cycle
+                    print *, row, col
                     ! water height at interface (col - 1, col) 
                     hfx = max(eta(row, col-1), eta(row, col)) - max(zb(row, col-1), zb(row, col))
                     
@@ -1118,6 +1194,7 @@ contains
 
             do row = 2, mesh%nrow
                 do col = 1, mesh%ncol
+                    if (mesh%active_cell(row, col) .eq. 0 .or. mesh%local_active_cell(row, col) .eq. 0) cycle
 
                     hfy = max(eta(row-1, col), eta(row, col)) - max(zb(row-1, col), zb(row, col))
 
@@ -1151,19 +1228,21 @@ contains
             ! update water height
             do row = 1, mesh%nrow
                 do col = 1, mesh%ncol
+                    if (mesh%active_cell(row, col) .eq. 0 .or. mesh%local_active_cell(row, col) .eq. 0) cycle
+
                     k = mesh%rowcol_to_ind_ac(row, col)
                             
                     hsw(row, col) = hsw(row, col) + dt / mesh%dx(row, col) * (qx(row, col) - qx(row, col+1)) & 
                     + dt / mesh%dy(row, col) * (qy(row, col) - qy(row+1, col))
                 
-                    ! if (t .eq. ((time_step - 1) * setup%dt)) then ! conseil tapenable egalite sur float pas fiable à remplacer par c_routing_time
-                    !     hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
-                    !         / mesh%dx(row, col) / mesh%dy(row, col)
+                    if (c_routing_time .eq. 1) then
+                        hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
+                            / mesh%dx(row, col) / mesh%dy(row, col)
                         
                         ! volume_in = volume_in + ac_qtz(k, setup%nqz)
                         
                     !     print *, ac_qtz(k, setup%nqz)
-                    ! end if
+                    end if
                     
                     if (hsw(row, col) .lt. 0._sp) then
                         if (col + 1 .lt. mesh%ncol) then
@@ -1210,14 +1289,7 @@ contains
                         qx(row, col) = hfx * sqrt(gravity * hfx)
                         qy(row, col) = hfy * sqrt(gravity * hfy)
                     end if
-                    !     qx(row, col) = mesh%dx(row, col) / mesh%dy(row, col) * &
-                    !         (qy(row+1, col) - qy(row, col)) + qx(row, col+1)
-                        
-                        
-                        ! if (t .eq. ((time_step - 1) * setup%dt)) then
-                        !     qx(row, col) = qx(row, col) - ac_qtz(k, setup%nqz) / mesh%dy(row, col)
-                        ! end if
-                    
+          
                 end do
             end do
             ! call macdonald_rainfall(mesh%nrow, mesh%ncol, hsw, dt)
@@ -1238,7 +1310,9 @@ contains
 
             ! call bc_wet_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy)
 
-            call bc_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, c_routing_time)
+            ! call bc_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, c_routing_time)
+
+            call bc_height(mesh, hsw, h_init)
 
             c_routing_time = c_routing_time + 1
             t = t + dt
@@ -1249,6 +1323,8 @@ contains
         ! smash c'est un flux a l interieur
         do row = 1, mesh%nrow
             do col = 1, mesh%ncol
+                if (mesh%active_cell(row, col) .eq. 0 .or. mesh%local_active_cell(row, col) .eq. 0) cycle
+
                 k = mesh%rowcol_to_ind_ac(row, col)
                 ac_qz(k, setup%nqz) = hsw(row, col) * mesh%dx(row, col) &
                     * mesh%dy(row, col) /setup%dt ! voir les unites
