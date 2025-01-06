@@ -164,11 +164,12 @@ contains
                 this%nt_sw = 10000
                 ! allocate(this%sw2d(mesh%nrow, mesh%ncol, 10, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
                 allocate(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
+                this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4) = -99._sp
 
             case ("sw2d_times")
                 ! allocate(this%sw2d_times(10, this%nt_sw))
                 allocate(this%sw2d_times(this%nt_sw))
-            
+                this%sw2d_times = -99._sp
             case ("sw2d_dt")
                 allocate(this%sw2d_dt(this%nt_sw))
 

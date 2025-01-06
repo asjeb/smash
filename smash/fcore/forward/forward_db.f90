@@ -22322,7 +22322,7 @@ MODULE MD_ROUTING_OPERATOR_DIFF
   USE MWD_SETUP
 !% only: MeshDT
   USE MWD_MESH
-!% only: Input_DataDT !% lie au prcp
+!% only: Input_DataDT ! physio_data%bathymetry
   USE MWD_INPUT_DATA
 !% only: OptionsDT
   USE MWD_OPTIONS_DIFF
@@ -23519,14 +23519,13 @@ CONTAINS
     qy = 0._sp
   END SUBROUTINE INITIAL_MACDONAL
 
-  SUBROUTINE INITIAL_ZERO(nrow, ncol, h, heps, qx, qy, zb)
+  SUBROUTINE INITIAL_ZERO(nrow, ncol, h, heps, qx, qy)
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: nrow, ncol
     REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
     REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: heps
     REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
     REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
-    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: zb
     h = heps
     qx = 0._sp
     qy = 0._sp
@@ -23993,8 +23992,9 @@ CONTAINS
   END SUBROUTINE INITIAL_THACKER2D
 
   SUBROUTINE SHALLOW_WATER_2D_TIME_STEP(setup, mesh, input_data, options&
-&   , returns, time_step, ac_qtz, zb, manning, ac_qz)
+&   , returns, time_step, ac_qtz, manning, ac_qz)
     IMPLICIT NONE
+! print(zb)
     TYPE(SETUPDT), INTENT(IN) :: setup
     TYPE(MESHDT), INTENT(IN) :: mesh
     TYPE(INPUT_DATADT), INTENT(IN) :: input_data
@@ -24002,7 +24002,7 @@ CONTAINS
     TYPE(RETURNSDT), INTENT(INOUT) :: returns
     INTEGER, INTENT(IN) :: time_step
     REAL(sp), DIMENSION(mesh%nac, setup%nqz), INTENT(IN) :: ac_qtz
-    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol), INTENT(IN) :: zb, manning
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol), INTENT(IN) :: manning
     REAL(sp), DIMENSION(mesh%nac, setup%nqz), INTENT(INOUT) :: ac_qz
 ! real(sp), dimension(:, :, :), allocatable :: hsw_t, eta_t, qx_t, qy_t
     REAL(sp), DIMENSION(mesh%nrow, mesh%ncol) :: hsw, eta
@@ -24017,6 +24017,8 @@ CONTAINS
     REAL(sp) :: qxc, qyc, theta
     REAL(sp) :: bb, hh1, hh2, ee1, ee2
     REAL(sp) :: volume_in, volume_out
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol) :: zb
+    zb = input_data%physio_data%bathymetry
   END SUBROUTINE SHALLOW_WATER_2D_TIME_STEP
 
 END MODULE MD_ROUTING_OPERATOR_DIFF
@@ -26909,15 +26911,12 @@ CONTAINS
 &                     checkpoint_variable%ac_qz, checkpoint_variable_d%&
 &                     ac_qz)
       CASE ('sw2d') 
-! % topography
 ! % manning coef
         CALL SHALLOW_WATER_2D_TIME_STEP(setup, mesh, input_data, options&
 &                                 , returns, t, checkpoint_variable%&
 &                                 ac_qtz, checkpoint_variable%&
 &                                 ac_rr_parameters(:, rr_parameters_inc+&
-&                                 1), checkpoint_variable%&
-&                                 ac_rr_parameters(:, rr_parameters_inc+&
-&                                 2), checkpoint_variable%ac_qz)
+&                                 1), checkpoint_variable%ac_qz)
       END SELECT
       CALL STORE_TIME_STEP_D(setup, mesh, output, output_d, returns, &
 &                      checkpoint_variable, checkpoint_variable_d, t)
@@ -29484,15 +29483,12 @@ CONTAINS
 &                   rr_parameters_inc+2), checkpoint_variable%ac_qz)
         rr_parameters_inc = rr_parameters_inc + 1
       CASE ('sw2d') 
-! % topography
 ! % manning coef
         CALL SHALLOW_WATER_2D_TIME_STEP(setup, mesh, input_data, options&
 &                                 , returns, t, checkpoint_variable%&
 &                                 ac_qtz, checkpoint_variable%&
 &                                 ac_rr_parameters(:, rr_parameters_inc+&
-&                                 1), checkpoint_variable%&
-&                                 ac_rr_parameters(:, rr_parameters_inc+&
-&                                 2), checkpoint_variable%ac_qz)
+&                                 1), checkpoint_variable%ac_qz)
         rr_parameters_inc = rr_parameters_inc + 1
       END SELECT
       CALL STORE_TIME_STEP(setup, mesh, output, returns, &

@@ -109,7 +109,7 @@ HYDROLOGICAL_MODULE_RR_PARAMETERS = dict(
 
 # % Following ROUTING_MODULE order
 ROUTING_MODULE_RR_PARAMETERS = dict(
-    zip(ROUTING_MODULE, [[], ["llr"], ["akw", "bkw"], ["topography", "manning"]])  # % lag0  # % lr  # % kw  # %sw2d
+    zip(ROUTING_MODULE, [[], ["llr"], ["akw", "bkw"], ["manning"]])  # % lag0  # % lr  # % kw  # %sw2d
 )
 
 # % Following MODULE order
@@ -302,7 +302,6 @@ RR_PARAMETERS = [
     "llr",  # % lr
     "akw",  # % kw
     "bkw",  # % kw
-    "topography", # % sw2d
     "manning", # % sw2d
 ]
 
@@ -361,7 +360,6 @@ FEASIBLE_RR_PARAMETERS = dict(
             (0, np.inf),  # % llr
             (0, np.inf),  # % akw
             (0, np.inf),  # % bkw
-            (-np.inf, np.inf),  # % topography
             (0, np.inf),  # % manning
         ],
     )
@@ -424,7 +422,6 @@ DEFAULT_RR_PARAMETERS = dict(
             5,  # % llr
             5,  # % akw
             0.6,  # % bkw
-            0.,  # % topography
             0.,  # % manning
         ],
     )
@@ -485,7 +482,6 @@ DEFAULT_BOUNDS_RR_PARAMETERS = dict(
             (1e-6, 1e3),  # % llr
             (1e-3, 50),  # % akw
             (1e-3, 1),  # % bkw
-            (1e-3, 8850),  # % topography
             (1e-3, 100),  # % manning
         ],
     )
