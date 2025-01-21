@@ -899,11 +899,13 @@ contains
             if (mesh%active_cell(row, 1) .eq. 0 .or. &
                 mesh%local_active_cell(row, 1) .eq. 0) cycle       
             h(row, 1) = bc_h
+        end do
 
+        do row = 1, mesh%nrow
             ! 3
             if (mesh%active_cell(row, mesh%ncol) .eq. 0 .or. &
                 mesh%local_active_cell(row, mesh%ncol) .eq. 0) cycle
-            h(row, mesh%ncol) = bc_h
+            h(row, mesh%ncol) = bc_h    
         end do
 
         do col = 1, mesh%ncol
@@ -911,7 +913,9 @@ contains
             if (mesh%active_cell(1, col) .eq. 0 .or. &
                 mesh%local_active_cell(1, col) .eq. 0) cycle
             h(1, col) = bc_h
-
+        end do
+        
+        do col = 1, mesh%ncol
             ! 4
             if (mesh%active_cell(mesh%nrow, col) .eq. 0 .or. &
                 mesh%local_active_cell(mesh%nrow, col) .eq. 0) cycle
@@ -1128,18 +1132,20 @@ contains
                 end do
             end do
             
-            print *, t, dt
+            ! print *, t, dt
 
-            print *, time_step
-            print *, "topo ="
-            print *, zb
+            ! print *, time_step
+            ! print *, "topo ="
+            ! print *, zb
 
-            print *, "hsw ="
-            print *, hsw
+            ! print *, "hsw ="
+            ! print *, hsw
             
-            print *, "eta ="
-            print *, eta
+            ! print *, "eta ="
+            ! print *, eta
             
+
+            ! REVOIR LE MODE DE STOCKAGE
             returns%sw2d(:, :, c_routing_time, 1) = hsw(:, :)
             returns%sw2d(:, :, c_routing_time, 2) = eta(:, :)
             returns%sw2d(:, :, c_routing_time, 3) = qx(:, :)
@@ -1235,6 +1241,7 @@ contains
                     hsw(row, col) = hsw(row, col) + dt / mesh%dx(row, col) * (qx(row, col) - qx(row, col+1)) & 
                     + dt / mesh%dy(row, col) * (qy(row, col) - qy(row+1, col))
                 
+                    ! CHECK SI ENTRE CORRECTEMENT DANS LE DOMAINE ...
                     if (c_routing_time .eq. 1) then
                         hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
                             / mesh%dx(row, col) / mesh%dy(row, col)
@@ -1245,46 +1252,49 @@ contains
                     end if
                     
                     if (hsw(row, col) .lt. 0._sp) then
-                        if (col + 1 .lt. mesh%ncol) then
-                            if (hsw(row, col + 1) .gt. 0._sp) then
+                        ! A VOIR CELL NEG TRANSFERS AU AUTRE MAIS FAIT DU NEG ...
 
-                                hsw(row, col + 1) = hsw(row, col + 1) + hsw(row, col) * &
-                                    mesh%dx(row, col) * mesh%dy(row, col) &
-                                    / mesh%dx(row, col + 1) / mesh%dy(row, col + 1)
+                        ! if (col + 1 .lt. mesh%ncol) then
+                        !     if (hsw(row, col + 1) .gt. 0._sp) then
 
-                            end if
-                        end if 
+                        !         hsw(row, col + 1) = hsw(row, col + 1) + hsw(row, col) * &
+                        !             mesh%dx(row, col) * mesh%dy(row, col) &
+                        !             / mesh%dx(row, col + 1) / mesh%dy(row, col + 1)
 
-                        if (col - 1 .gt. 0) then
-                            if (hsw(row, col - 1) .gt. 0._sp) then
+                        !     end if
+                        ! end if 
 
-                                hsw(row, col - 1) = hsw(row, col - 1) + hsw(row, col) * &
-                                    mesh%dx(row, col) * mesh%dy(row, col) &
-                                    / mesh%dx(row, col - 1) / mesh%dy(row, col - 1)
+                        ! if (col - 1 .gt. 0) then
+                        !     if (hsw(row, col - 1) .gt. 0._sp) then
+
+                        !         hsw(row, col - 1) = hsw(row, col - 1) + hsw(row, col) * &
+                        !             mesh%dx(row, col) * mesh%dy(row, col) &
+                        !             / mesh%dx(row, col - 1) / mesh%dy(row, col - 1)
                             
-                            end if
-                        end if
+                        !     end if
+                        ! end if
 
-                        if (row + 1 .lt. mesh%nrow) then
-                            if (hsw(row + 1, col) .gt. 0._sp) then
+                        ! if (row + 1 .lt. mesh%nrow) then
+                        !     if (hsw(row + 1, col) .gt. 0._sp) then
 
-                                hsw(row + 1, col) = hsw(row + 1, col) + hsw(row, col) * &
-                                    mesh%dx(row, col) * mesh%dy(row, col) &
-                                    / mesh%dx(row + 1, col) / mesh%dy(row + 1, col)
+                        !         hsw(row + 1, col) = hsw(row + 1, col) + hsw(row, col) * &
+                        !             mesh%dx(row, col) * mesh%dy(row, col) &
+                        !             / mesh%dx(row + 1, col) / mesh%dy(row + 1, col)
                             
-                            end if
-                        end if
+                        !     end if
+                        ! end if
 
-                        if (row - 1 .gt. 0) then
-                            if (hsw(row - 1, col) .gt. 0._sp) then
+                        ! if (row - 1 .gt. 0) then
+                        !     if (hsw(row - 1, col) .gt. 0._sp) then
 
-                                hsw(row - 1, col) = hsw(row - 1, col) + hsw(row, col) * &
-                                    mesh%dx(row, col) * mesh%dy(row, col) &
-                                    / mesh%dx(row - 1, col) / mesh%dy(row - 1, col) 
+                        !         hsw(row - 1, col) = hsw(row - 1, col) + hsw(row, col) * &
+                        !             mesh%dx(row, col) * mesh%dy(row, col) &
+                        !             / mesh%dx(row - 1, col) / mesh%dy(row - 1, col) 
                             
-                            end if
-                        end if
-                    
+                        !     end if
+                        ! end if
+
+                        ! SI PAS DE TRANSFERT ON RAJOUTE DE LA FLOTTE DEDANS ...
                         hsw(row, col) = 0._sp
                         qx(row, col) = hfx * sqrt(gravity * hfx)
                         qy(row, col) = hfy * sqrt(gravity * hfy)
@@ -1321,15 +1331,18 @@ contains
         !update volume discharge
         ! avoir les fluxes aux interfaces h au centre
         ! smash c'est un flux a l interieur
-        do row = 1, mesh%nrow
-            do col = 1, mesh%ncol
-                if (mesh%active_cell(row, col) .eq. 0 .or. mesh%local_active_cell(row, col) .eq. 0) cycle
+        
+        ! CREATE NAN ...
+        ! do row = 1, mesh%nrow
+        !     do col = 1, mesh%ncol
+        !         if (mesh%active_cell(row, col) .eq. 0 .or. mesh%local_active_cell(row, col) .eq. 0) cycle
 
-                k = mesh%rowcol_to_ind_ac(row, col)
-                ac_qz(k, setup%nqz) = hsw(row, col) * mesh%dx(row, col) &
-                    * mesh%dy(row, col) /setup%dt ! voir les unites
-            end do
-        end do
+        !         k = mesh%rowcol_to_ind_ac(row, col)
+        !         ac_qz(k, setup%nqz) = hsw(row, col) * mesh%dx(row, col) &
+        !             * mesh%dy(row, col) /setup%dt ! voir les unites
+        !     end do
+        ! end do 
+
 
         !$AD end-exclude
     end subroutine shallow_water_2d_time_step
