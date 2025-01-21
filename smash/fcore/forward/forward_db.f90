@@ -2770,10 +2770,12 @@ CONTAINS
         this%nt_sw = 10000
 ! allocate(this%sw2d(mesh%nrow, mesh%ncol, 10, this%nt_sw, 4)) !hsw_t, eta_t, qx_t, qy_t
         ALLOCATE(this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4))
-      CASE ('sw2d_times') 
 !hsw_t, eta_t, qx_t, qy_t
+        this%sw2d(mesh%nrow, mesh%ncol, this%nt_sw, 4) = -99._sp
+      CASE ('sw2d_times') 
 ! allocate(this%sw2d_times(10, this%nt_sw))
         ALLOCATE(this%sw2d_times(this%nt_sw))
+        this%sw2d_times = -99._sp
       CASE ('sw2d_dt') 
         ALLOCATE(this%sw2d_dt(this%nt_sw))
       END SELECT
@@ -23519,18 +23521,6 @@ CONTAINS
     qy = 0._sp
   END SUBROUTINE INITIAL_MACDONAL
 
-  SUBROUTINE INITIAL_ZERO(nrow, ncol, h, heps, qx, qy)
-    IMPLICIT NONE
-    INTEGER, INTENT(IN) :: nrow, ncol
-    REAL(sp), DIMENSION(nrow, ncol), INTENT(INOUT) :: h
-    REAL(sp), DIMENSION(nrow, ncol), INTENT(IN) :: heps
-    REAL(sp), DIMENSION(nrow, ncol+1), INTENT(INOUT) :: qx
-    REAL(sp), DIMENSION(nrow+1, ncol), INTENT(INOUT) :: qy
-    h = heps
-    qx = 0._sp
-    qy = 0._sp
-  END SUBROUTINE INITIAL_ZERO
-
   SUBROUTINE BC_MACDONALD_WAVE(nrow, ncol, h, qx, qy, c)
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: nrow, ncol
@@ -23861,6 +23851,61 @@ CONTAINS
     qy(nrow+1, :) = 0._sp
   END SUBROUTINE BC_WALL
 
+  SUBROUTINE INITIAL_HEIGHT(mesh, h, h0, qx, qy)
+    IMPLICIT NONE
+    TYPE(MESHDT), INTENT(IN) :: mesh
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol), INTENT(INOUT) :: h
+    REAL(sp), INTENT(IN) :: h0
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol+1), INTENT(INOUT) :: qx
+    REAL(sp), DIMENSION(mesh%nrow+1, mesh%ncol), INTENT(INOUT) :: qy
+    INTEGER :: row, col
+    DO row=1,mesh%nrow
+      DO col=1,mesh%ncol
+        IF (.NOT.(mesh%active_cell(row, col) .EQ. 0 .OR. mesh%&
+&           local_active_cell(row, col) .EQ. 0)) THEN
+          h(row, col) = h0
+          qx(row, col) = 0._sp
+          qy(row, col) = 0._sp
+        END IF
+      END DO
+    END DO
+  END SUBROUTINE INITIAL_HEIGHT
+
+  SUBROUTINE BC_HEIGHT(mesh, h, bc_h)
+    IMPLICIT NONE
+    TYPE(MESHDT), INTENT(IN) :: mesh
+    REAL(sp), DIMENSION(mesh%nrow, mesh%ncol), INTENT(INOUT) :: h
+    REAL(sp), INTENT(IN) :: bc_h
+    INTEGER :: row, col
+!                            2
+!  |------------------------------------------------------|
+! 1|                                                      |3
+!  |------------------------------------------------------|
+!                            4
+    DO row=1,mesh%nrow
+! 1
+      IF (.NOT.(mesh%active_cell(row, 1) .EQ. 0 .OR. mesh%&
+&         local_active_cell(row, 1) .EQ. 0)) THEN
+        h(row, 1) = bc_h
+! 3
+        IF (.NOT.(mesh%active_cell(row, mesh%ncol) .EQ. 0 .OR. mesh%&
+&           local_active_cell(row, mesh%ncol) .EQ. 0)) h(row, mesh%ncol)&
+&          = bc_h
+      END IF
+    END DO
+    DO col=1,mesh%ncol
+! 2
+      IF (.NOT.(mesh%active_cell(1, col) .EQ. 0 .OR. mesh%&
+&         local_active_cell(1, col) .EQ. 0)) THEN
+        h(1, col) = bc_h
+! 4
+        IF (.NOT.(mesh%active_cell(mesh%nrow, col) .EQ. 0 .OR. mesh%&
+&           local_active_cell(mesh%nrow, col) .EQ. 0)) h(mesh%nrow, col)&
+&          = bc_h
+      END IF
+    END DO
+  END SUBROUTINE BC_HEIGHT
+
   SUBROUTINE FREE_OUTFLOW(mesh, hsw, zb, qx, qy, manning, dt)
     IMPLICIT NONE
     TYPE(MESHDT), INTENT(IN) :: mesh
@@ -23883,77 +23928,90 @@ CONTAINS
     REAL(sp) :: result1
     DO col=1,mesh%ncol
 ! up
-      slope = (zb(1, col)-zb(2, col))/mesh%dy(1, col)
-      IF (slope .GT. 0) THEN
-        sgn = 1._sp
-      ELSE
-        sgn = -1._sp
-      END IF
-      IF (slope .GE. 0.) THEN
-        abs0 = slope
-      ELSE
-        abs0 = -slope
-      END IF
-      pwr1 = hsw(1, col)**(5._sp/3._sp)
-      result1 = SQRT(abs0)
-      qy(1, col) = sgn*pwr1*result1/manning(1, col)
-      qout = qout + sgn*qy(1, col)
-      volume_out = volume_out + qout*mesh%dx(1, col)*dt
+      IF (.NOT.(mesh%active_cell(1, col) .EQ. 0 .OR. mesh%&
+&         local_active_cell(1, col) .EQ. 0)) THEN
+        slope = (zb(1, col)-zb(2, col))/mesh%dy(1, col)
+        IF (slope .GT. 0) THEN
+          sgn = 1._sp
+        ELSE
+          sgn = -1._sp
+        END IF
+        IF (slope .GE. 0.) THEN
+          abs0 = slope
+        ELSE
+          abs0 = -slope
+        END IF
+        pwr1 = hsw(1, col)**(5._sp/3._sp)
+        result1 = SQRT(abs0)
+        qy(1, col) = sgn*pwr1*result1/manning(1, col)
+        qout = qout + sgn*qy(1, col)
+        volume_out = volume_out + qout*mesh%dx(1, col)*dt
 ! down
-      slope = (zb(mesh%nrow, col)-zb(mesh%nrow-1, col))/mesh%dy(mesh%&
-&       nrow, col)
-      IF (slope .GT. 0) THEN
-        sgn = 1._sp
-      ELSE
-        sgn = -1._sp
+        IF (.NOT.(mesh%active_cell(mesh%nrow, col) .EQ. 0 .OR. mesh%&
+&           local_active_cell(mesh%nrow, col) .EQ. 0)) THEN
+          slope = (zb(mesh%nrow, col)-zb(mesh%nrow-1, col))/mesh%dy(mesh&
+&           %nrow, col)
+          IF (slope .GT. 0) THEN
+            sgn = 1._sp
+          ELSE
+            sgn = -1._sp
+          END IF
+          IF (slope .GE. 0.) THEN
+            abs1 = slope
+          ELSE
+            abs1 = -slope
+          END IF
+          pwr1 = hsw(mesh%nrow, col)**(5._sp/3._sp)
+          result1 = SQRT(abs1)
+          qy(mesh%nrow+1, col) = sgn*pwr1*result1/manning(mesh%nrow, col&
+&           )
+          qout = qout + sgn*qy(mesh%nrow+1, col)
+          volume_out = volume_out + qout*mesh%dx(mesh%nrow, col)*dt
+        END IF
       END IF
-      IF (slope .GE. 0.) THEN
-        abs1 = slope
-      ELSE
-        abs1 = -slope
-      END IF
-      pwr1 = hsw(mesh%nrow, col)**(5._sp/3._sp)
-      result1 = SQRT(abs1)
-      qy(mesh%nrow+1, col) = sgn*pwr1*result1/manning(mesh%nrow, col)
-      qout = qout + sgn*qy(mesh%nrow+1, col)
-      volume_out = volume_out + qout*mesh%dx(mesh%nrow, col)*dt
     END DO
     DO row=1,mesh%nrow
 ! left
-      slope = (zb(row, 2)-zb(row, 1))/mesh%dx(row, 1)
-      IF (slope .GT. 0) THEN
-        sgn = 1
-      ELSE
-        sgn = -1
-      END IF
-      IF (slope .GE. 0.) THEN
-        abs2 = slope
-      ELSE
-        abs2 = -slope
-      END IF
-      pwr1 = hsw(row, 1)**(5._sp/3._sp)
-      result1 = SQRT(abs2)
-      qx(row, 1) = sgn*pwr1*result1/manning(row, 1)
-      qout = qout + sgn*qx(row, 1)
-      volume_out = volume_out + qout*mesh%dy(row, 1)*dt
+      IF (.NOT.(mesh%active_cell(row, 1) .EQ. 0 .OR. mesh%&
+&         local_active_cell(row, 1) .EQ. 0)) THEN
+        slope = (zb(row, 2)-zb(row, 1))/mesh%dx(row, 1)
+        IF (slope .GT. 0) THEN
+          sgn = 1
+        ELSE
+          sgn = -1
+        END IF
+        IF (slope .GE. 0.) THEN
+          abs2 = slope
+        ELSE
+          abs2 = -slope
+        END IF
+        pwr1 = hsw(row, 1)**(5._sp/3._sp)
+        result1 = SQRT(abs2)
+        qx(row, 1) = sgn*pwr1*result1/manning(row, 1)
+        qout = qout + sgn*qx(row, 1)
+        volume_out = volume_out + qout*mesh%dy(row, 1)*dt
 ! right
-      slope = (zb(row, mesh%ncol-1)-zb(row, mesh%ncol))/mesh%dx(row, &
-&       mesh%ncol)
-      IF (slope .GT. 0) THEN
-        sgn = 1
-      ELSE
-        sgn = -1
+        IF (.NOT.(mesh%active_cell(row, mesh%ncol) .EQ. 0 .OR. mesh%&
+&           local_active_cell(row, mesh%ncol) .EQ. 0)) THEN
+          slope = (zb(row, mesh%ncol-1)-zb(row, mesh%ncol))/mesh%dx(row&
+&           , mesh%ncol)
+          IF (slope .GT. 0) THEN
+            sgn = 1
+          ELSE
+            sgn = -1
+          END IF
+          IF (slope .GE. 0.) THEN
+            abs3 = slope
+          ELSE
+            abs3 = -slope
+          END IF
+          pwr1 = hsw(row, mesh%ncol)**(5._sp/3._sp)
+          result1 = SQRT(abs3)
+          qx(row, mesh%ncol+1) = pwr1*result1/manning(row, mesh%ncol)
+          qout = qout + sgn*qx(row, mesh%ncol+1)
+          volume_out = volume_out + qout*mesh%dy(row, mesh%ncol)*dt
+        END IF
       END IF
-      IF (slope .GE. 0.) THEN
-        abs3 = slope
-      ELSE
-        abs3 = -slope
-      END IF
-      pwr1 = hsw(row, mesh%ncol)**(5._sp/3._sp)
-      result1 = SQRT(abs3)
-      qx(row, mesh%ncol+1) = pwr1*result1/manning(row, mesh%ncol)
-      qout = qout + sgn*qx(row, mesh%ncol+1)
-      volume_out = volume_out + qout*mesh%dy(row, mesh%ncol)*dt
     END DO
   END SUBROUTINE FREE_OUTFLOW
 
@@ -24018,6 +24076,12 @@ CONTAINS
     REAL(sp) :: bb, hh1, hh2, ee1, ee2
     REAL(sp) :: volume_in, volume_out
     REAL(sp), DIMENSION(mesh%nrow, mesh%ncol) :: zb
+    REAL(sp) :: h_init
+    c_routing_time = 1
+    hsw(:, :) = returns%sw2d(:, :, c_routing_time, 1)
+    eta(:, :) = returns%sw2d(:, :, c_routing_time, 2)
+    qx(:, :) = returns%sw2d(:, :, c_routing_time, 3)
+    qy(:, :) = returns%sw2d(:, :, c_routing_time, 4)
     zb = input_data%physio_data%bathymetry
   END SUBROUTINE SHALLOW_WATER_2D_TIME_STEP
 

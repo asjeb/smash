@@ -124,7 +124,7 @@ contains
         this%flwdst = -99._sp
 
         allocate(this%outlet_indices(2))
-        this%outlet_indices = -99._sp
+        this%outlet_indices = -99
 
         allocate (this%ncpar(this%npar))
         this%ncpar = -99
