@@ -65,6 +65,7 @@ module mwd_mesh
         integer, dimension(:, :), allocatable :: flwdir
         real(sp), dimension(:, :), allocatable :: flwacc
         real(sp), dimension(:, :), allocatable :: flwdst
+        integer, dimension(:), allocatable :: outlet_indices !$F90W index-array
 
         integer :: npar
         integer, dimension(:), allocatable :: ncpar
@@ -121,6 +122,9 @@ contains
 
         allocate (this%flwdst(this%nrow, this%ncol))
         this%flwdst = -99._sp
+
+        allocate(this%outlet_indices(2))
+        this%outlet_indices = -99._sp
 
         allocate (this%ncpar(this%npar))
         this%ncpar = -99

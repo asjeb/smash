@@ -477,7 +477,9 @@ def _generate_mesh_from_xy(
     flwdst = np.ma.masked_array(flwdst, mask=flwdir.mask)
 
     flwacc = np.ma.masked_array(flwacc, mask=flwdir.mask)
-
+    
+    outlet_indices = mw_mesh.outlet_indices(flwacc) 
+    
     npar = np.max(flwpar)
     ncpar, cscpar, cpar_to_rowcol = mw_mesh.flow_partition_variable(npar, flwpar)
     flwpar = np.ma.masked_array(flwpar, mask=flwdir.mask)
@@ -500,6 +502,7 @@ def _generate_mesh_from_xy(
         "flwdir": flwdir,
         "flwdst": flwdst,
         "flwacc": flwacc,
+        "outlet_indices": outlet_indices,
         "npar": npar,
         "ncpar": ncpar,
         "cscpar": cscpar,
@@ -552,7 +555,9 @@ def _generate_mesh_from_bbox(flwdir_dataset: rasterio.DatasetReader, bbox: np.nd
     flwacc, flwpar = mw_mesh.flow_accumulation_partition(flwdir, dx, dy)
 
     flwacc = np.ma.masked_array(flwacc, mask=flwdir.mask)
-
+    
+    outlet_indices = mw_mesh.outlet_indices(flwacc) 
+    
     npar = np.max(flwpar)
     ncpar, cscpar, cpar_to_rowcol = mw_mesh.flow_partition_variable(npar, flwpar)
     flwpar = np.ma.masked_array(flwpar, mask=flwdir.mask)
@@ -571,6 +576,7 @@ def _generate_mesh_from_bbox(flwdir_dataset: rasterio.DatasetReader, bbox: np.nd
         "dy": dy,
         "flwdir": flwdir,
         "flwacc": flwacc,
+        "outlet_indices": outlet_indices,
         "npar": npar,
         "ncpar": ncpar,
         "cscpar": cscpar,

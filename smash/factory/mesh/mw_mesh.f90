@@ -317,6 +317,29 @@ contains
 
     end subroutine flow_accumulation_partition
 
+
+    subroutine outlet_indices(nrow, ncol, flwacc, i, j)
+
+        implicit none
+
+        integer, intent(in) :: nrow, ncol
+        real(4), dimension(nrow, ncol), intent(in) :: flwacc
+        integer, intent(out) :: i, j
+        integer :: row, col
+        
+        do col=1, size(flwacc, 2)
+            do row=1, size(flwacc, 1)
+                if (flwacc(col, row) .eq. maxval(flwacc)) then
+                    j = col - 1
+                    i = row - 1
+                    return ! hypothesis : only one outlet pixel
+                end if
+            end do
+        end do
+                 
+    end subroutine outlet_indices
+
+
     !% Works for small array
     function argsort_i(a, asc) result(b)
 
