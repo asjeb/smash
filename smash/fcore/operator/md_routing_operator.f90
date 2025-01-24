@@ -882,13 +882,18 @@ contains
 
 
 
-    subroutine bc_height(mesh, h, bc_h)
+    subroutine bc_height(mesh, h, bc_h, qx, qy)
         implicit none
         type(MeshDT), intent(in) :: mesh
         real(sp), dimension(mesh%nrow, mesh%ncol), intent(inout) :: h
+        real(sp), dimension(mesh%nrow, mesh%ncol+1), intent(inout) :: qx
+        real(sp), dimension(mesh%nrow+1, mesh%ncol), intent(inout) :: qy
         real(sp), intent(in) :: bc_h
         integer :: row, col
 
+        
+        ! h(mesh%outlet_indices(2), mesh%outlet_indices(1)) = bc_h
+        
         !                            2
         !  |------------------------------------------------------|
         ! 1|                                                      |3
@@ -939,9 +944,8 @@ contains
         integer :: row, col
         real (sp) :: sgn
         real (sp) :: slope
-        real (sp) :: qout, volume_out
-
-
+        real (sp) :: qout, volume_out        
+        
         do col = 1, mesh%ncol
 
             ! up
@@ -960,9 +964,13 @@ contains
                 sqrt(abs(slope)) / manning(1, col)
             
                 
-            qout = qout + sgn * qy(1, col) 
+            ! qout = qout + sgn * qy(1, col) 
 
-            volume_out = volume_out + qout * mesh%dx(1, col) * dt
+            ! volume_out = volume_out + qout * mesh%dx(1, col) * dt
+        
+        end do
+
+        do col = 1, mesh%ncol
 
             ! down
             if (mesh%active_cell(mesh%nrow, col) .eq. 0 .or. &
@@ -980,9 +988,9 @@ contains
                 sqrt(abs(slope)) / manning(mesh%nrow, col)
             
 
-            qout = qout + sgn * qy(mesh%nrow+1, col)
+            ! qout = qout + sgn * qy(mesh%nrow+1, col)
 
-            volume_out = volume_out + qout * mesh%dx(mesh%nrow, col) * dt
+            ! volume_out = volume_out + qout * mesh%dx(mesh%nrow, col) * dt
 
         end do
 
@@ -1004,14 +1012,17 @@ contains
                 sqrt(abs(slope)) / manning(row, 1)
 
 
-            qout = qout + sgn * qx(row, 1)
+            ! qout = qout + sgn * qx(row, 1)
 
-            volume_out = volume_out + qout * mesh%dy(row, 1) * dt
+            ! volume_out = volume_out + qout * mesh%dy(row, 1) * dt
+        end do
 
+        do row = 1, mesh%nrow
             ! right
             if (mesh%active_cell(row, mesh%ncol) .eq. 0 .or. &
             mesh%local_active_cell(row, mesh%ncol) .eq. 0) cycle
             
+
             slope = (zb(row, mesh%ncol-1) - zb(row, mesh%ncol)) / mesh%dx(row, mesh%ncol)
 
             if (slope .gt. 0) then
@@ -1024,10 +1035,9 @@ contains
                 sqrt(abs(slope)) / manning(row, mesh%ncol)
 
 
-            qout = qout + sgn * qx(row, mesh%ncol+1)
+            ! qout = qout + sgn * qx(row, mesh%ncol+1)
 
-            volume_out = volume_out + qout * mesh%dy(row, mesh%ncol) * dt
-            
+            ! volume_out = volume_out + qout * mesh%dy(row, mesh%ncol) * dt
         end do
     end subroutine free_outflow
 
@@ -1083,6 +1093,7 @@ contains
         real(sp), dimension(mesh%nac) :: ac_prcp
 
         integer :: i, j, row, col, k, time_returns, nt_sw, nt_sw_old, c_routing_time
+        integer :: neighbors
         real(sp) :: t, dt
         real(sp) :: heps, qeps, hfx, hfy, maxhsw, hxm, hxp, hym, hyp, dzb, h, hh, z
         real(sp) :: qxc, qyc, theta
@@ -1104,7 +1115,7 @@ contains
         !$AD start-exclude
         ! initialisation
         t = (time_step - 1) * setup%dt
-        
+        ! theta = 1._sp
         ! print *, time_step
         ! call initial_thacker2d(mesh, hsw, qx, qy, zb)
         ! call initial_lake_at_rest_immersive_bump(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
@@ -1119,7 +1130,7 @@ contains
         
         heps = 1.e-6 ! under heps the water height is considered as 0
         qeps = 1.e-8
-        h_init = 1.
+        h_init = 1._sp
         
         call initial_height(mesh, hsw, h_init, qx, qy)
         
@@ -1161,7 +1172,6 @@ contains
             do row = 1, mesh%nrow
                 do col = 2, mesh%ncol
                     if (mesh%active_cell(row, col) .eq. 0 .or. mesh%local_active_cell(row, col) .eq. 0) cycle
-                    print *, row, col
                     ! water height at interface (col - 1, col) 
                     hfx = max(eta(row, col-1), eta(row, col)) - max(zb(row, col-1), zb(row, col))
                     
@@ -1242,62 +1252,69 @@ contains
                     + dt / mesh%dy(row, col) * (qy(row, col) - qy(row+1, col))
                 
                     ! CHECK SI ENTRE CORRECTEMENT DANS LE DOMAINE ...
-                    if (c_routing_time .eq. 1) then
-                        hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
-                            / mesh%dx(row, col) / mesh%dy(row, col)
+                    ! if (c_routing_time .eq. 1) then
+                    !     hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
+                    !         / mesh%dx(row, col) / mesh%dy(row, col)
                         
-                        ! volume_in = volume_in + ac_qtz(k, setup%nqz)
+                    !     ! volume_in = volume_in + ac_qtz(k, setup%nqz)
                         
-                    !     print *, ac_qtz(k, setup%nqz)
-                    end if
+                    !     ! print *, ac_qtz(k, setup%nqz)
+                    ! end if
                     
                     if (hsw(row, col) .lt. 0._sp) then
                         ! A VOIR CELL NEG TRANSFERS AU AUTRE MAIS FAIT DU NEG ...
+                        neighbors = 0
+                        if (col + 1 .lt. mesh%ncol) then
+                            if (hsw(row, col + 1) * mesh%dx(row, col + 1) * mesh%dy(row, col + 1)&
+                                .gt. -hsw(row, col) * mesh%dx(row, col) * mesh%dy(row, col)) then
+                                
+                                neighbors = neighbors + 1
 
-                        ! if (col + 1 .lt. mesh%ncol) then
-                        !     if (hsw(row, col + 1) .gt. 0._sp) then
+                                hsw(row, col + 1) = hsw(row, col + 1) + hsw(row, col) * &
+                                    mesh%dx(row, col) * mesh%dy(row, col) &
+                                    / mesh%dx(row, col + 1) / mesh%dy(row, col + 1)                                
+                            end if
+                        end if 
+                        
+                        if (col - 1 .gt. 0) then
+                            if (hsw(row, col - 1) * mesh%dx(row, col - 1) * mesh%dy(row, col - 1)&
+                                .gt. -hsw(row, col) * mesh%dx(row, col) * mesh%dy(row, col)) then
 
-                        !         hsw(row, col + 1) = hsw(row, col + 1) + hsw(row, col) * &
-                        !             mesh%dx(row, col) * mesh%dy(row, col) &
-                        !             / mesh%dx(row, col + 1) / mesh%dy(row, col + 1)
+                                neighbors = neighbors + 1
 
-                        !     end if
-                        ! end if 
+                                hsw(row, col - 1) = hsw(row, col - 1) + hsw(row, col) * &
+                                    mesh%dx(row, col) * mesh%dy(row, col) &
+                                    / mesh%dx(row, col - 1) / mesh%dy(row, col - 1)
+                            end if
+                        end if
 
-                        ! if (col - 1 .gt. 0) then
-                        !     if (hsw(row, col - 1) .gt. 0._sp) then
+                        if (row + 1 .lt. mesh%nrow) then
+                            if (hsw(row + 1, col) * mesh%dx(row + 1, col) * mesh%dy(row + 1, col)&
+                                .gt. -hsw(row, col) * mesh%dx(row, col) * mesh%dy(row, col)) then
 
-                        !         hsw(row, col - 1) = hsw(row, col - 1) + hsw(row, col) * &
-                        !             mesh%dx(row, col) * mesh%dy(row, col) &
-                        !             / mesh%dx(row, col - 1) / mesh%dy(row, col - 1)
-                            
-                        !     end if
-                        ! end if
+                                neighbors = neighbors + 1
 
-                        ! if (row + 1 .lt. mesh%nrow) then
-                        !     if (hsw(row + 1, col) .gt. 0._sp) then
+                                hsw(row + 1, col) = hsw(row + 1, col) + hsw(row, col) * &
+                                    mesh%dx(row, col) * mesh%dy(row, col) &
+                                    / mesh%dx(row + 1, col) / mesh%dy(row + 1, col)
+                            end if
+                        end if
 
-                        !         hsw(row + 1, col) = hsw(row + 1, col) + hsw(row, col) * &
-                        !             mesh%dx(row, col) * mesh%dy(row, col) &
-                        !             / mesh%dx(row + 1, col) / mesh%dy(row + 1, col)
-                            
-                        !     end if
-                        ! end if
+                        if (row - 1 .gt. 0) then
+                            if (hsw(row - 1, col) * mesh%dx(row - 1, col) * mesh%dy(row - 1, col)&
+                            .gt. -hsw(row, col) * mesh%dx(row, col) * mesh%dy(row, col)) then
 
-                        ! if (row - 1 .gt. 0) then
-                        !     if (hsw(row - 1, col) .gt. 0._sp) then
+                                neighbors = neighbors + 1
 
-                        !         hsw(row - 1, col) = hsw(row - 1, col) + hsw(row, col) * &
-                        !             mesh%dx(row, col) * mesh%dy(row, col) &
-                        !             / mesh%dx(row - 1, col) / mesh%dy(row - 1, col) 
-                            
-                        !     end if
-                        ! end if
+                                hsw(row - 1, col) = hsw(row - 1, col) + hsw(row, col) * &
+                                    mesh%dx(row, col) * mesh%dy(row, col) &
+                                    / mesh%dx(row - 1, col) / mesh%dy(row - 1, col) 
+                            end if
+                        end if
 
-                        ! SI PAS DE TRANSFERT ON RAJOUTE DE LA FLOTTE DEDANS ...
                         hsw(row, col) = 0._sp
-                        qx(row, col) = hfx * sqrt(gravity * hfx)
-                        qy(row, col) = hfy * sqrt(gravity * hfy)
+                        qx(row, col) = 0._sp !hfx * sqrt(gravity * hfx)
+                        qy(row, col) = 0._sp !hfy * sqrt(gravity * hfy)
                     end if
           
                 end do
@@ -1307,7 +1324,7 @@ contains
             ! call free_outflow(mesh, hsw, zb, qx, qy, manning, dt)
             
             ! call bc_wall(mesh%nrow, mesh%ncol, hsw, qx, qy, c_routing_time)
-!
+
             ! call apply_bump_bc(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, c_routing_time)
 
             ! call bc_mac_donald(mesh%nrow, mesh%ncol, hsw, qx, qy, zb, c_routing_time)
@@ -1322,7 +1339,7 @@ contains
 
             ! call bc_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, c_routing_time)
 
-            call bc_height(mesh, hsw, h_init)
+            call bc_height(mesh, hsw, 10._sp, qx, qy)
 
             c_routing_time = c_routing_time + 1
             t = t + dt
