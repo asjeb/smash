@@ -836,7 +836,7 @@ contains
                     returns, &
                     t, &
                     checkpoint_variable%ac_qtz, &
-                    checkpoint_variable%ac_rr_parameters(:, rr_parameters_inc + 1), & ! % manning coef
+                    ! checkpoint_variable%ac_rr_parameters(:, rr_parameters_inc + 1), & ! % manning coef
                     checkpoint_variable%ac_qz)
                 
                 rr_parameters_inc = rr_parameters_inc + 1

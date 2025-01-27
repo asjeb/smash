@@ -892,40 +892,40 @@ contains
         integer :: row, col
 
         
-        ! h(mesh%outlet_indices(2), mesh%outlet_indices(1)) = bc_h
+        h(mesh%outlet_indices(2), mesh%outlet_indices(1)) = bc_h
         
         !                            2
         !  |------------------------------------------------------|
         ! 1|                                                      |3
         !  |------------------------------------------------------|
         !                            4
-        do row = 1, mesh%nrow
-            ! 1
-            if (mesh%active_cell(row, 1) .eq. 0 .or. &
-                mesh%local_active_cell(row, 1) .eq. 0) cycle       
-            h(row, 1) = bc_h
-        end do
+        ! do row = 1, mesh%nrow
+        !     ! 1
+        !     if (mesh%active_cell(row, 1) .eq. 0 .or. &
+        !         mesh%local_active_cell(row, 1) .eq. 0) cycle       
+        !     h(row, 1) = bc_h
+        ! end do
 
-        do row = 1, mesh%nrow
-            ! 3
-            if (mesh%active_cell(row, mesh%ncol) .eq. 0 .or. &
-                mesh%local_active_cell(row, mesh%ncol) .eq. 0) cycle
-            h(row, mesh%ncol) = bc_h    
-        end do
+        ! do row = 1, mesh%nrow
+        !     ! 3
+        !     if (mesh%active_cell(row, mesh%ncol) .eq. 0 .or. &
+        !         mesh%local_active_cell(row, mesh%ncol) .eq. 0) cycle
+        !     h(row, mesh%ncol) = bc_h    
+        ! end do
 
-        do col = 1, mesh%ncol
-            ! 2
-            if (mesh%active_cell(1, col) .eq. 0 .or. &
-                mesh%local_active_cell(1, col) .eq. 0) cycle
-            h(1, col) = bc_h
-        end do
+        ! do col = 1, mesh%ncol
+        !     ! 2
+        !     if (mesh%active_cell(1, col) .eq. 0 .or. &
+        !         mesh%local_active_cell(1, col) .eq. 0) cycle
+        !     h(1, col) = bc_h
+        ! end do
         
-        do col = 1, mesh%ncol
-            ! 4
-            if (mesh%active_cell(mesh%nrow, col) .eq. 0 .or. &
-                mesh%local_active_cell(mesh%nrow, col) .eq. 0) cycle
-            h(mesh%nrow, col) = bc_h
-        end do
+        ! do col = 1, mesh%ncol
+        !     ! 4
+        !     if (mesh%active_cell(mesh%nrow, col) .eq. 0 .or. &
+        !         mesh%local_active_cell(mesh%nrow, col) .eq. 0) cycle
+        !     h(mesh%nrow, col) = bc_h
+        ! end do
 
     end subroutine bc_height
 
@@ -938,7 +938,8 @@ contains
         real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: hsw, zb
         real(sp), dimension(mesh%nrow, mesh%ncol+1), intent(inout) :: qx
         real(sp), dimension(mesh%nrow+1, mesh%ncol), intent(inout) :: qy
-        real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: manning
+        ! real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: manning
+        real(sp), intent(in) :: manning
         real(sp), intent(in) :: dt
 
         integer :: row, col
@@ -953,16 +954,9 @@ contains
                 mesh%local_active_cell(1, col) .eq. 0) cycle
 
             slope = (zb(1, col) - zb(2, col)) /  mesh%dy(1, col)
-            
-            if (slope .gt. 0) then
-                sgn = 1._sp
-            else
-                sgn = -1._sp
-            end if
 
-            qy(1, col) = sgn * hsw(1, col) ** (5._sp / 3._sp) * &
-                sqrt(abs(slope)) / manning(1, col)
-            
+            qy(1, col) = -hsw(1, col) ** (5._sp / 3._sp) * &
+                sqrt(abs(slope)) / manning !(1, col)
                 
             ! qout = qout + sgn * qy(1, col) 
 
@@ -978,16 +972,9 @@ contains
 
             slope = (zb(mesh%nrow, col) - zb(mesh%nrow-1, col)) / mesh%dy(mesh%nrow, col)
 
-            if (slope .gt. 0) then
-                sgn = 1._sp
-            else
-                sgn = -1._sp
-            end if
-
-            qy(mesh%nrow+1, col) = sgn * hsw(mesh%nrow, col) ** (5._sp / 3._sp) * &
-                sqrt(abs(slope)) / manning(mesh%nrow, col)
+            qy(mesh%nrow+1, col) = hsw(mesh%nrow, col) ** (5._sp / 3._sp) * &
+                sqrt(abs(slope)) / manning !(mesh%nrow, col)
             
-
             ! qout = qout + sgn * qy(mesh%nrow+1, col)
 
             ! volume_out = volume_out + qout * mesh%dx(mesh%nrow, col) * dt
@@ -1001,23 +988,18 @@ contains
             mesh%local_active_cell(row, 1) .eq. 0) cycle
             
             slope = (zb(row, 2) - zb(row, 1)) / mesh%dx(row, 1)
-
-            if (slope .gt. 0) then
-                sgn = 1
-            else
-                sgn = -1
-            end if
             
-            qx(row, 1) = sgn * hsw(row, 1) ** (5._sp / 3._sp) * &
-                sqrt(abs(slope)) / manning(row, 1)
-
-
+            qx(row, 1) = -hsw(row, 1) ** (5._sp / 3._sp) * &
+                sqrt(abs(slope)) / manning !manning(row, 1)
+            
             ! qout = qout + sgn * qx(row, 1)
 
             ! volume_out = volume_out + qout * mesh%dy(row, 1) * dt
+
         end do
 
         do row = 1, mesh%nrow
+
             ! right
             if (mesh%active_cell(row, mesh%ncol) .eq. 0 .or. &
             mesh%local_active_cell(row, mesh%ncol) .eq. 0) cycle
@@ -1025,19 +1007,13 @@ contains
 
             slope = (zb(row, mesh%ncol-1) - zb(row, mesh%ncol)) / mesh%dx(row, mesh%ncol)
 
-            if (slope .gt. 0) then
-                sgn = 1
-            else
-                sgn = -1
-            end if
-
             qx(row, mesh%ncol+1) = hsw(row, mesh%ncol) ** (5._sp / 3._sp) * &
-                sqrt(abs(slope)) / manning(row, mesh%ncol)
-
+                sqrt(abs(slope)) / manning !(row, mesh%ncol)
 
             ! qout = qout + sgn * qx(row, mesh%ncol+1)
 
             ! volume_out = volume_out + qout * mesh%dy(row, mesh%ncol) * dt
+
         end do
     end subroutine free_outflow
 
@@ -1074,7 +1050,7 @@ contains
 
 
     subroutine shallow_water_2d_time_step(setup, mesh, input_data, options, returns, &
-            time_step, ac_qtz, manning, ac_qz)
+            time_step, ac_qtz, ac_qz)
         implicit none
 
         type(SetupDT), intent(in) :: setup
@@ -1084,7 +1060,7 @@ contains
         type(ReturnsDT), intent(inout) :: returns
         integer, intent(in) :: time_step
         real(sp), dimension(mesh%nac, setup%nqz), intent(in) :: ac_qtz
-        real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: manning
+        ! real(sp), dimension(mesh%nrow, mesh%ncol), intent(in) :: manning
         real(sp), dimension(mesh%nac, setup%nqz), intent(inout) :: ac_qz
         ! real(sp), dimension(:, :, :), allocatable :: hsw_t, eta_t, qx_t, qy_t
         real(sp), dimension(mesh%nrow, mesh%ncol) :: hsw, eta
@@ -1110,6 +1086,9 @@ contains
         qy(:, :) = returns%sw2d(:, :, c_routing_time, 4)
 
         zb = input_data%physio_data%bathymetry
+
+        ! print *, manning
+
         ! print(zb)
 
         !$AD start-exclude
@@ -1121,7 +1100,6 @@ contains
         ! call initial_lake_at_rest_immersive_bump(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
         ! call initial_bump(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
         ! call initial_macdonal(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
-        ! call initial_thacker2d(mesh, hsw, qx, qy, zb)
         ! call initial_dry_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
         ! call initial_wet_dambreak(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
         ! call initial_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, zb)
@@ -1191,7 +1169,7 @@ contains
                         ! the fluxes are update
                         qx(row, col) = (qxc - dt * gravity * hfx * &
                             (eta(row, col) - eta(row, col-1)) / mesh%dx(row, col)) / &
-                            (1 + dt * gravity * manning(row, col) ** 2 * abs(qx(row, col)) &
+                            (1 + dt * gravity * manning ** 2 * abs(qx(row, col)) &
                             / hfx ** (7._sp / 3._sp))
                     
                     ! there is not motion
@@ -1227,7 +1205,7 @@ contains
 
                         qy(row, col) = (qyc - dt * gravity * hfy * &
                             (eta(row, col) - eta(row-1, col)) / mesh%dy(row, col)) / &
-                            (1 + dt * gravity * manning(row, col) ** 2 * abs(qy(row, col)) &
+                            (1 + dt * gravity * manning ** 2 * abs(qy(row, col)) &
                             / hfy ** (7._sp / 3._sp))
                         
                     else 
@@ -1252,23 +1230,20 @@ contains
                     + dt / mesh%dy(row, col) * (qy(row, col) - qy(row+1, col))
                 
                     ! CHECK SI ENTRE CORRECTEMENT DANS LE DOMAINE ...
+                    ! PQ AC_QTZ EST EGAL A 0 ??????
                     ! if (c_routing_time .eq. 1) then
                     !     hsw(row, col) = hsw(row, col) + dt * ac_qtz(k, setup%nqz) &
                     !         / mesh%dx(row, col) / mesh%dy(row, col)
                         
                     !     ! volume_in = volume_in + ac_qtz(k, setup%nqz)
                         
-                    !     ! print *, ac_qtz(k, setup%nqz)
+                    !     print *, ac_qtz(k, setup%nqz)
                     ! end if
                     
                     if (hsw(row, col) .lt. 0._sp) then
-                        ! A VOIR CELL NEG TRANSFERS AU AUTRE MAIS FAIT DU NEG ...
-                        neighbors = 0
                         if (col + 1 .lt. mesh%ncol) then
                             if (hsw(row, col + 1) * mesh%dx(row, col + 1) * mesh%dy(row, col + 1)&
                                 .gt. -hsw(row, col) * mesh%dx(row, col) * mesh%dy(row, col)) then
-                                
-                                neighbors = neighbors + 1
 
                                 hsw(row, col + 1) = hsw(row, col + 1) + hsw(row, col) * &
                                     mesh%dx(row, col) * mesh%dy(row, col) &
@@ -1280,8 +1255,6 @@ contains
                             if (hsw(row, col - 1) * mesh%dx(row, col - 1) * mesh%dy(row, col - 1)&
                                 .gt. -hsw(row, col) * mesh%dx(row, col) * mesh%dy(row, col)) then
 
-                                neighbors = neighbors + 1
-
                                 hsw(row, col - 1) = hsw(row, col - 1) + hsw(row, col) * &
                                     mesh%dx(row, col) * mesh%dy(row, col) &
                                     / mesh%dx(row, col - 1) / mesh%dy(row, col - 1)
@@ -1291,8 +1264,6 @@ contains
                         if (row + 1 .lt. mesh%nrow) then
                             if (hsw(row + 1, col) * mesh%dx(row + 1, col) * mesh%dy(row + 1, col)&
                                 .gt. -hsw(row, col) * mesh%dx(row, col) * mesh%dy(row, col)) then
-
-                                neighbors = neighbors + 1
 
                                 hsw(row + 1, col) = hsw(row + 1, col) + hsw(row, col) * &
                                     mesh%dx(row, col) * mesh%dy(row, col) &
@@ -1304,8 +1275,6 @@ contains
                             if (hsw(row - 1, col) * mesh%dx(row - 1, col) * mesh%dy(row - 1, col)&
                             .gt. -hsw(row, col) * mesh%dx(row, col) * mesh%dy(row, col)) then
 
-                                neighbors = neighbors + 1
-
                                 hsw(row - 1, col) = hsw(row - 1, col) + hsw(row, col) * &
                                     mesh%dx(row, col) * mesh%dy(row, col) &
                                     / mesh%dx(row - 1, col) / mesh%dy(row - 1, col) 
@@ -1316,12 +1285,12 @@ contains
                         qx(row, col) = 0._sp !hfx * sqrt(gravity * hfx)
                         qy(row, col) = 0._sp !hfy * sqrt(gravity * hfy)
                     end if
-          
+                    
                 end do
             end do
             ! call macdonald_rainfall(mesh%nrow, mesh%ncol, hsw, dt)
 
-            ! call free_outflow(mesh, hsw, zb, qx, qy, manning, dt)
+            call free_outflow(mesh, hsw, zb, qx, qy, manning, dt)
             
             ! call bc_wall(mesh%nrow, mesh%ncol, hsw, qx, qy, c_routing_time)
 
@@ -1339,7 +1308,7 @@ contains
 
             ! call bc_bump_drain(mesh%nrow, mesh%ncol, hsw, qx, qy, c_routing_time)
 
-            call bc_height(mesh, hsw, 10._sp, qx, qy)
+            ! call bc_height(mesh, hsw, 4._sp, qx, qy)
 
             c_routing_time = c_routing_time + 1
             t = t + dt

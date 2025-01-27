@@ -422,7 +422,7 @@ DEFAULT_RR_PARAMETERS = dict(
             5,  # % llr
             5,  # % akw
             0.6,  # % bkw
-            0.,  # % manning
+            0.033,  # % manning
         ],
     )
 )
