@@ -479,13 +479,15 @@ def _generate_mesh_from_xy(
     flwacc = np.ma.masked_array(flwacc, mask=flwdir.mask)
     
     outlet_indices = mw_mesh.outlet_indices(flwacc) 
-    
+        
     npar = np.max(flwpar)
     ncpar, cscpar, cpar_to_rowcol = mw_mesh.flow_partition_variable(npar, flwpar)
     flwpar = np.ma.masked_array(flwpar, mask=flwdir.mask)
 
     nac = np.count_nonzero(~flwdir.mask)
     active_cell = 1 - flwdir.mask.astype(np.int32)
+
+    boundaries = mw_mesh.boundaries(active_cell)
 
     ng = x.size
     gauge_pos = np.column_stack((row_dln, col_dln))
@@ -503,6 +505,7 @@ def _generate_mesh_from_xy(
         "flwdst": flwdst,
         "flwacc": flwacc,
         "outlet_indices": outlet_indices,
+        "boundaries": boundaries,
         "npar": npar,
         "ncpar": ncpar,
         "cscpar": cscpar,
@@ -565,6 +568,8 @@ def _generate_mesh_from_bbox(flwdir_dataset: rasterio.DatasetReader, bbox: np.nd
     nac = np.count_nonzero(~flwdir.mask)
     active_cell = 1 - flwdir.mask.astype(np.int32)
 
+    boundaries = mw_mesh.boundaries(active_cell)
+
     mesh = {
         "xres": xres,
         "yres": yres,
@@ -577,6 +582,7 @@ def _generate_mesh_from_bbox(flwdir_dataset: rasterio.DatasetReader, bbox: np.nd
         "flwdir": flwdir,
         "flwacc": flwacc,
         "outlet_indices": outlet_indices,
+        "boundaries": boundaries,
         "npar": npar,
         "ncpar": ncpar,
         "cscpar": cscpar,

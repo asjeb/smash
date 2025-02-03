@@ -327,9 +327,9 @@ contains
         integer, intent(out) :: i, j
         integer :: row, col
         
-        do col=1, size(flwacc, 2)
-            do row=1, size(flwacc, 1)
-                if (flwacc(col, row) .eq. maxval(flwacc)) then
+        do col=1, ncol
+            do row=1, nrow
+                if (flwacc(row, col) .eq. maxval(flwacc)) then
                     j = col - 1
                     i = row - 1
                     return ! hypothesis : only one outlet pixel
@@ -338,6 +338,63 @@ contains
         end do
                  
     end subroutine outlet_indices
+
+
+    subroutine boundaries(nrow, ncol, active_cell, coloring)
+
+        implicit none
+
+        integer, intent(in) :: nrow, ncol
+        real(4), dimension(nrow, ncol), intent(in) :: active_cell
+        integer, dimension(nrow, ncol), intent(out) :: coloring
+        integer :: row, col
+        
+        ! four colors      
+        ! 17 = already visited
+        !                            2
+        !  |------------------------------------------------------|
+        ! 1|                                                      |3
+        !  |------------------------------------------------------|
+        !                            4
+
+        do col=1, ncol
+            do row=1, nrow
+                if (coloring(row, col) .ne. 17) then ! cell already visited
+
+                    if (active_cell(row, col) .eq. 1) then
+                        coloring(row, col) = 17 
+
+                        if (col .lt. ncol - 1) then
+                            if (active_cell(row, col + 1) .eq. 0) then
+                                coloring(row, col) = 3 ! boundary cell
+                            end if
+                        end if
+
+                        if (col .gt. 1) then
+                            if (active_cell(row, col - 1) .eq. 0) then
+                                coloring(row, col) = 1
+                            end if
+                        end if
+
+                        if (row .lt. nrow - 1) then
+                            if (active_cell(row + 1, col) .eq. 0) then
+                                coloring(row, col) = 4
+                            end if
+                        end if
+
+                        if (row .gt. 1) then
+                            if (active_cell(row - 1, col) .eq. 0) then
+                                coloring(row, col) = 2
+                            end if
+                        end if
+
+                    end if
+                    
+                end if
+            end do
+        end do
+
+    end subroutine boundaries
 
 
     !% Works for small array
