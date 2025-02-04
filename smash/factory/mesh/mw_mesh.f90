@@ -350,50 +350,61 @@ contains
         integer :: row, col
         
         ! four colors      
-        ! 17 = already visited
+        ! -1 = already visited
         !                            2
         !  |------------------------------------------------------|
         ! 1|                                                      |3
         !  |------------------------------------------------------|
         !                            4
-
-        do col=1, ncol
-            do row=1, nrow
-                if (coloring(row, col) .ne. 17) then ! cell already visited
-
+        coloring = 0
+         
+        col = 1
+        do while (col .lt. ncol + 1)
+            
+            row = 1
+            do while (row .lt. nrow + 1)
+                do while (coloring(row, col) .eq. 0)
+                                        
+                    coloring(row, col) = -1
                     if (active_cell(row, col) .eq. 1) then
-                        coloring(row, col) = 17 
-
-                        if (col .lt. ncol - 1) then
+                        
+                        if (col .lt. ncol) then
                             if (active_cell(row, col + 1) .eq. 0) then
                                 coloring(row, col) = 3 ! boundary cell
+                                coloring(row, col + 1) = -1
                             end if
                         end if
-
+        
                         if (col .gt. 1) then
                             if (active_cell(row, col - 1) .eq. 0) then
                                 coloring(row, col) = 1
+                                coloring(row, col - 1) = -1
                             end if
                         end if
-
-                        if (row .lt. nrow - 1) then
+        
+                        if (row .lt. nrow) then
                             if (active_cell(row + 1, col) .eq. 0) then
                                 coloring(row, col) = 4
+                                coloring(row + 1, col) = -1
                             end if
                         end if
-
+        
                         if (row .gt. 1) then
                             if (active_cell(row - 1, col) .eq. 0) then
                                 coloring(row, col) = 2
+                                coloring(row - 1, col) = -1
                             end if
                         end if
-
+        
                     end if
-                    
-                end if
-            end do
-        end do
+                end do
 
+                row = row + 1
+            end do
+
+            col = col + 1
+        end do
+        
     end subroutine boundaries
 
 
