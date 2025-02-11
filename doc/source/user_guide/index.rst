@@ -61,6 +61,8 @@ providing detailed guidance for experienced users looking to maximize the softwa
     in_depth/advanced_learnable_regionalization
     in_depth/hybrid_model_strutures
     in_depth/bayesian_estimation_approach
+    in_depth/how_to_use_imperviousness
+
 
 Post-processing and Interfacing `smash` with External Tools
 -----------------------------------------------------------
